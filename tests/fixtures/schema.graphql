@@ -1,0 +1,9 @@
+"""Synthetic fixture for the documentation build smoke test."""
+type Query {
+  widget(id: ID!): Widget
+}
+
+type Widget {
+  id: ID!
+  name: String!
+}

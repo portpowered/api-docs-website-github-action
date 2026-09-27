@@ -1,0 +1,79 @@
+name: Publish API Documentation
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: Website title.
+        required: false
+        type: string
+        default: API Documentation
+      openapi:
+        description: Comma-separated paths or globs for OpenAPI documents.
+        required: false
+        type: string
+      asyncapi:
+        description: Comma-separated paths or globs for AsyncAPI documents.
+        required: false
+        type: string
+      graphql:
+        description: Comma-separated paths or globs for GraphQL documents.
+        required: false
+        type: string
+      discover:
+        description: Discover supported schemas in the repository.
+        required: false
+        type: boolean
+        default: true
+      source-directory:
+        description: Root directory for schema paths and discovery.
+        required: false
+        type: string
+        default: .
+      output:
+        description: Directory in which to build the static website.
+        required: false
+        type: string
+        default: api-docs-out
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Generate API reference website
+        uses: portpowered/api-docs-website-github-action@main
+        with:
+          title: ${{ inputs.title }}
+          openapi: ${{ inputs.openapi }}
+          asyncapi: ${{ inputs.asyncapi }}
+          graphql: ${{ inputs.graphql }}
+          discover: ${{ inputs.discover }}
+          source-directory: ${{ inputs.source-directory }}
+          output: ${{ inputs.output }}
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ inputs.output }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

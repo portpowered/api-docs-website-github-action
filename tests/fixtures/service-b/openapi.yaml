@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Sample Library Admin API
+  version: 1.0.0
+paths:
+  /admin/widgets:
+    get:
+      operationId: listAdminWidgets
+      summary: List administrative widgets
+      responses:
+        '200':
+          description: Administrative widgets.

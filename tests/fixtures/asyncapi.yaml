@@ -1,0 +1,17 @@
+asyncapi: 2.6.0
+info:
+  title: Sample Library Events
+  version: 1.0.0
+  description: Synthetic fixture for the documentation build smoke test.
+channels:
+  widgets/created:
+    publish:
+      operationId: publishWidgetCreated
+      summary: Widget created
+      message:
+        name: WidgetCreated
+        payload:
+          type: object
+          properties:
+            widgetId:
+              type: string

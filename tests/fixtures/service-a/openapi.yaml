@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Sample Library Catalog API
+  version: 1.0.0
+paths:
+  /catalog:
+    get:
+      operationId: listCatalogItems
+      summary: List catalog items
+      responses:
+        '200':
+          description: Catalog items.

@@ -1,0 +1,35 @@
+asyncapi: 3.0.0
+info:
+  title: Sample Library AsyncAPI 3
+  version: 1.0.0
+  description: Synthetic AsyncAPI 3 fixture using channel and message references.
+servers:
+  local:
+    host: localhost
+    protocol: ws
+channels:
+  widgetEvents:
+    address: /widgets
+    messages:
+      widgetCreated:
+        $ref: '#/components/messages/WidgetCreated'
+operations:
+  receiveWidgetCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/widgetEvents'
+    messages:
+      - $ref: '#/channels/widgetEvents/messages/widgetCreated'
+components:
+  messages:
+    WidgetCreated:
+      name: WidgetCreated
+      title: Widget created event
+      payload:
+        type: object
+        required: [widgetId]
+        properties:
+          widgetId:
+            type: string
+          revision:
+            type: integer

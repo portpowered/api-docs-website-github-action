@@ -1,0 +1,50 @@
+name: API Docs
+description: Generate a static API reference from OpenAPI, AsyncAPI, and GraphQL schemas.
+inputs:
+  title:
+    description: Website title.
+    required: false
+    default: API Documentation
+  openapi:
+    description: Comma-separated paths or globs for OpenAPI documents.
+    required: false
+  asyncapi:
+    description: Comma-separated paths or globs for AsyncAPI documents.
+    required: false
+  graphql:
+    description: Comma-separated paths or globs for GraphQL SDL documents.
+    required: false
+  discover:
+    description: Discover supported schemas in the source directory.
+    required: false
+    default: "true"
+  source-directory:
+    description: Root directory for schema paths and discovery.
+    required: false
+    default: .
+  output:
+    description: Directory in which to write the static website.
+    required: false
+    default: api-docs-out
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Install generator dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --ignore-scripts --no-audit --no-fund
+    - name: Generate API reference website
+      shell: bash
+      env:
+        API_DOCS_TITLE: ${{ inputs.title }}
+        API_DOCS_OPENAPI: ${{ inputs.openapi }}
+        API_DOCS_ASYNCAPI: ${{ inputs.asyncapi }}
+        API_DOCS_GRAPHQL: ${{ inputs.graphql }}
+        API_DOCS_DISCOVER: ${{ inputs.discover }}
+        API_DOCS_SOURCE: ${{ inputs.source-directory }}
+        API_DOCS_OUTPUT: ${{ inputs.output }}
+      run: node "${{ github.action_path }}/scripts/build.mjs"
