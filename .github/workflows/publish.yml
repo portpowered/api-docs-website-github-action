@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: .
+      base-path:
+        description: URL prefix for GitHub Pages project sites, such as /go-ring. Defaults to the repository name.
+        required: false
+        type: string
+        default: ""
       output:
         description: Directory in which to build the static website.
         required: false
@@ -50,7 +55,7 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Generate API reference website
-        uses: portpowered/api-docs-website-github-action@main
+        uses: portpowered/api-docs-website-github-action@v0.2.0
         with:
           title: ${{ inputs.title }}
           openapi: ${{ inputs.openapi }}
@@ -58,6 +63,7 @@ jobs:
           graphql: ${{ inputs.graphql }}
           discover: ${{ inputs.discover }}
           source-directory: ${{ inputs.source-directory }}
+          base-path: ${{ inputs.base-path }}
           output: ${{ inputs.output }}
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4

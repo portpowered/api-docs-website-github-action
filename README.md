@@ -1,10 +1,8 @@
 # API Docs Website GitHub Action
 
-Generate a small, self-contained API reference site from OpenAPI, AsyncAPI, and GraphQL schema files, then publish it with GitHub Pages.
+Generate a static API reference from OpenAPI, AsyncAPI, and GraphQL schema files, then publish it with GitHub Pages.
 
-The generated site has a searchable navigation sidebar and documents OpenAPI operations and component schemas, AsyncAPI publish/subscribe channels, and GraphQL definitions. It is a single static `index.html` with inline styling and script, so it works at a GitHub Pages project URL without extra base path configuration.
-
-The first version uses a Fumadocs-inspired documentation layout with a small static renderer. This keeps builds self-contained and avoids requiring a Next.js runtime in customer repositories; interactive API playgrounds are not part of this version.
+The action builds a static Next.js site with the default Fumadocs theme and the official Fumadocs OpenAPI and AsyncAPI integrations. Each operation has its own page with the integrations' schema views, request and response details, and code examples. GraphQL SDL is converted into navigable Fumadocs pages. The exported files run on GitHub Pages without a server.
 
 ## Reusable Pages workflow
 
@@ -28,12 +26,13 @@ permissions:
 
 jobs:
   publish:
-    uses: portpowered/api-docs-website-github-action/.github/workflows/publish.yml@main
+    uses: portpowered/api-docs-website-github-action/.github/workflows/publish.yml@v0.2.0
     with:
       title: go-ring API Reference
       openapi: api/openapi.yaml
       asyncapi: api/asyncapi.yaml
       discover: false
+      base-path: /go-ring
 ```
 
 The caller repository must enable GitHub Pages with **GitHub Actions** as the build and deployment source. The reusable workflow checks out the caller's source, generates the site, uploads the Pages artifact, and deploys it.
@@ -43,16 +42,17 @@ The caller repository must enable GitHub Pages with **GitHub Actions** as the bu
 Use the action in an existing workflow when deployment is managed separately:
 
 ```yaml
-- uses: portpowered/api-docs-website-github-action@main
+- uses: portpowered/api-docs-website-github-action@v0.2.0
   with:
     title: My Library API
     openapi: "api/openapi.yaml, api/admin/*.json"
     asyncapi: api/events.yaml
     graphql: "schema/**/*.graphql"
     discover: false
+    base-path: /my-library
     output: api-docs-out
 ```
 
 Inputs accept comma-separated paths or globs relative to `source-directory`. If no paths are given for a type, discovery recognizes OpenAPI and AsyncAPI documents by their `openapi` or `asyncapi` version field and includes `.graphql` and `.gql` files. Discovery skips common dependency and build directories. Set `discover: false` to use only explicitly listed files.
 
-The `output` directory contains `index.html` and can be uploaded as a Pages artifact or hosted on any static file server.
+The `output` directory contains the static site and its assets. On GitHub Actions, the base path defaults to the repository name for project Pages sites. Set `base-path` explicitly for a custom path or a different hosting setup.

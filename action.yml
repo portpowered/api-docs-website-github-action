@@ -22,6 +22,10 @@ inputs:
     description: Root directory for schema paths and discovery.
     required: false
     default: .
+  base-path:
+    description: URL prefix used for GitHub Pages project sites, such as /go-ring. Defaults to the repository name when running on GitHub Actions.
+    required: false
+    default: ""
   output:
     description: Directory in which to write the static website.
     required: false
@@ -36,7 +40,7 @@ runs:
     - name: Install generator dependencies
       shell: bash
       working-directory: ${{ github.action_path }}
-      run: npm ci --ignore-scripts --no-audit --no-fund
+      run: npm ci --no-audit --no-fund
     - name: Generate API reference website
       shell: bash
       env:
@@ -46,5 +50,6 @@ runs:
         API_DOCS_GRAPHQL: ${{ inputs.graphql }}
         API_DOCS_DISCOVER: ${{ inputs.discover }}
         API_DOCS_SOURCE: ${{ inputs.source-directory }}
+        API_DOCS_BASE_PATH: ${{ inputs.base-path }}
         API_DOCS_OUTPUT: ${{ inputs.output }}
       run: node "${{ github.action_path }}/scripts/build.mjs"
