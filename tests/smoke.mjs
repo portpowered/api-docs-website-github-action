@@ -10,6 +10,14 @@ const fixtureRoot = join(repoRoot, 'tests', 'fixtures');
 const tempRoot = await mkdtemp(join(tmpdir(), 'api-docs-smoke-'));
 const outputRoot = join(tempRoot, 'site');
 const basePath = '/go-ring';
+const actionVersion = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).version;
+const reusableWorkflow = await readFile(join(repoRoot, '.github', 'workflows', 'publish.yml'), 'utf8');
+assert(
+  reusableWorkflow.includes(`uses: portpowered/api-docs-website-github-action@v${actionVersion}`),
+  'Reusable workflow must invoke the composite action at its own release version.',
+);
+assert(reusableWorkflow.includes('guides-directory: ${{ inputs.guides-directory }}'),
+  'Reusable workflow must forward the guides directory.');
 
 async function listFiles(root, directory = root) {
   const files = [];

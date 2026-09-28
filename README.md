@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   publish:
-    uses: portpowered/api-docs-website-github-action/.github/workflows/publish.yml@v0.3.0
+    uses: portpowered/api-docs-website-github-action/.github/workflows/publish.yml@v0.3.1
     with:
       title: go-ring API Reference
       openapi: api/openapi.yaml
@@ -43,7 +43,7 @@ The caller repository must enable GitHub Pages with **GitHub Actions** as the bu
 Use the action in an existing workflow when deployment is managed separately:
 
 ```yaml
-- uses: portpowered/api-docs-website-github-action@v0.3.0
+- uses: portpowered/api-docs-website-github-action@v0.3.1
   with:
     title: My Library API
     openapi: "api/openapi.yaml, api/admin/*.json"
