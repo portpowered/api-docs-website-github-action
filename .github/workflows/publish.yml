@@ -30,6 +30,10 @@ on:
         required: false
         type: string
         default: .
+      guides-directory:
+        description: Optional directory of Markdown or MDX guides, relative to source-directory.
+        required: false
+        type: string
       base-path:
         description: URL prefix for GitHub Pages project sites, such as /go-ring. Defaults to the repository name.
         required: false
@@ -63,6 +67,7 @@ jobs:
           graphql: ${{ inputs.graphql }}
           discover: ${{ inputs.discover }}
           source-directory: ${{ inputs.source-directory }}
+          guides-directory: ${{ inputs.guides-directory }}
           base-path: ${{ inputs.base-path }}
           output: ${{ inputs.output }}
       - name: Upload GitHub Pages artifact

@@ -35,6 +35,7 @@ try {
       API_DOCS_GRAPHQL: 'schema.graphql',
       API_DOCS_DISCOVER: 'false',
       API_DOCS_SOURCE: fixtureRoot,
+      API_DOCS_GUIDES: 'guides',
       API_DOCS_OUTPUT: outputRoot,
     },
   });
@@ -76,11 +77,38 @@ try {
 
   const graphqlPage = pageAtRoute('docs/graphql/operations/query/widget/index.html', 'Operation: query', 'GraphQL query');
   assert(graphqlPage.html.includes('Type: ID!'), 'GraphQL operation page must render its argument type.');
+  const guidePage = pageAtRoute('docs/guides/enumerate-devices/index.html', 'Find the devices available to a cloud account.', 'native Fumadocs guide');
+  assert(guidePage.html.includes('List all devices available to the account.'), 'Guide page must render its authored Markdown body.');
 
   const docsIndex = pages.find(({ file }) => file === join('docs', 'index.html'));
   assert(docsIndex, 'Fumadocs docs landing page must be exported.');
-  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API']) {
+  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
+  }
+
+  for (const [guides, expectedMessage] of [
+    ['missing-guides', 'Guides directory does not exist: missing-guides'],
+    ['../outside-source', 'guides-directory must be a directory inside source-directory'],
+  ]) {
+    const invalidBuild = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        API_DOCS_TITLE: 'Smoke Test API Reference',
+        API_DOCS_OPENAPI: 'openapi.yaml',
+        API_DOCS_DISCOVER: 'false',
+        API_DOCS_SOURCE: fixtureRoot,
+        API_DOCS_GUIDES: guides,
+        API_DOCS_OUTPUT: outputRoot,
+      },
+    });
+    assert.notEqual(invalidBuild.status, 0, `Build must reject invalid guides-directory value ${guides}.`);
+    assert(
+      `${invalidBuild.stdout}\n${invalidBuild.stderr}`.includes(expectedMessage),
+      `Invalid guides-directory value ${guides} must explain ${expectedMessage}.`,
+    );
   }
 
   const assetReferences = pages.flatMap(({ html }) =>

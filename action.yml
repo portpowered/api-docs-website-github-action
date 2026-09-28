@@ -22,6 +22,9 @@ inputs:
     description: Root directory for schema paths and discovery.
     required: false
     default: .
+  guides-directory:
+    description: Optional directory of Markdown or MDX guides, relative to source-directory.
+    required: false
   base-path:
     description: URL prefix used for GitHub Pages project sites, such as /go-ring. Defaults to the repository name when running on GitHub Actions.
     required: false
@@ -50,6 +53,7 @@ runs:
         API_DOCS_GRAPHQL: ${{ inputs.graphql }}
         API_DOCS_DISCOVER: ${{ inputs.discover }}
         API_DOCS_SOURCE: ${{ inputs.source-directory }}
+        API_DOCS_GUIDES: ${{ inputs.guides-directory }}
         API_DOCS_BASE_PATH: ${{ inputs.base-path }}
         API_DOCS_OUTPUT: ${{ inputs.output }}
       run: node "${{ github.action_path }}/scripts/build.mjs"

@@ -1,6 +1,6 @@
 {
   "name": "@portpowered/api-docs-website-github-action",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Generate a static API reference website from OpenAPI, AsyncAPI, and GraphQL schemas.",
   "type": "module",

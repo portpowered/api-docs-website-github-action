@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,7 @@ const buildRoot = path.join(actionRoot, '.fumadocs-build');
 const title = process.env.API_DOCS_TITLE?.trim() || 'API Documentation';
 const basePath = (process.env.API_DOCS_BASE_PATH || '').trim().replace(/\/$/, '');
 const discover = (process.env.API_DOCS_DISCOVER || 'true').toLowerCase() !== 'false';
+const guidesDirectory = process.env.API_DOCS_GUIDES?.trim();
 
 function patterns(name) {
   return (process.env[`API_DOCS_${name}`] || '').split(',').map((item) => item.trim()).filter(Boolean);
@@ -48,9 +49,61 @@ function slug(value) {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'schema';
 }
 
+function assertWithin(root, target, description) {
+  const relative = path.relative(root, target);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`${description} must be a directory inside source-directory.`);
+  }
+}
+
+async function validateGuideTree(directory) {
+  let hasGuidePage = false;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      throw new Error(`Guides directory cannot contain symbolic links: ${entryPath}`);
+    }
+    if (entry.isDirectory()) {
+      const nestedHasGuidePage = await validateGuideTree(entryPath);
+      hasGuidePage ||= nestedHasGuidePage;
+    }
+    else if (entry.isFile() && /\.(md|mdx)$/i.test(entry.name)) hasGuidePage = true;
+  }
+  return hasGuidePage;
+}
+
+async function resolveGuidesDirectory() {
+  if (!guidesDirectory) return undefined;
+  if (path.isAbsolute(guidesDirectory) || path.win32.isAbsolute(guidesDirectory)) {
+    throw new Error('guides-directory must be a relative directory path inside source-directory.');
+  }
+
+  const sourceRealPath = await realpath(sourceRoot);
+  const guidesPath = path.resolve(sourceRoot, guidesDirectory);
+  assertWithin(sourceRoot, guidesPath, 'guides-directory');
+  let guidesRealPath;
+  try {
+    guidesRealPath = await realpath(guidesPath);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      throw new Error(`Guides directory does not exist: ${guidesDirectory}`);
+    }
+    throw error;
+  }
+  assertWithin(sourceRealPath, guidesRealPath, 'guides-directory');
+  if (!(await stat(guidesRealPath)).isDirectory()) {
+    throw new Error(`Guides path is not a directory: ${guidesDirectory}`);
+  }
+  if (!(await validateGuideTree(guidesRealPath))) {
+    throw new Error(`Guides directory contains no Markdown or MDX pages: ${guidesDirectory}`);
+  }
+  return guidesRealPath;
+}
+
 const openApiFiles = await matches(patterns('OPENAPI'), ['yaml', 'yml', 'json']);
 const asyncApiFiles = await matches(patterns('ASYNCAPI'), ['yaml', 'yml', 'json']);
 const graphqlFiles = await matches(patterns('GRAPHQL'), ['graphql', 'gql']);
+const guidesSource = await resolveGuidesDirectory();
 const schemas = { openapi: [], asyncapi: [], graphql: [] };
 const seen = new Set();
 
@@ -95,6 +148,7 @@ if (!sourceFromOutput || (!sourceFromOutput.startsWith(`..${path.sep}`) && sourc
 await rm(buildRoot, { recursive: true, force: true });
 await mkdir(path.join(buildRoot, 'content', 'docs'), { recursive: true });
 await cp(path.join(actionRoot, 'template'), buildRoot, { recursive: true });
+if (guidesSource) await cp(guidesSource, path.join(buildRoot, 'content', 'docs', 'guides'), { recursive: true });
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
 
