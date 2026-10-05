@@ -9,6 +9,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureRoot = join(repoRoot, 'tests', 'fixtures');
 const tempRoot = await mkdtemp(join(tmpdir(), 'api-docs-smoke-'));
 const outputRoot = join(tempRoot, 'site');
+const automaticOutputRoot = join(tempRoot, 'automatic-site');
 const basePath = '/go-ring';
 const actionVersion = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).version;
 const reusableWorkflow = await readFile(join(repoRoot, '.github', 'workflows', 'publish.yml'), 'utf8');
@@ -33,6 +34,64 @@ async function listFiles(root, directory = root) {
     else files.push(relative(root, fullPath));
   }
   return files;
+}
+
+function pageRoute(file) {
+  const normalized = file.replaceAll('\\', '/');
+  if (normalized === 'index.html') return `${basePath}/`;
+  if (normalized.endsWith('/index.html')) return `${basePath}/${normalized.slice(0, -'index.html'.length)}`;
+  return `${basePath}/${normalized}`;
+}
+
+function decodeHtml(value) {
+  return value
+    .replaceAll('&amp;', '&')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>');
+}
+
+async function assertInternalLinksResolve(pages, siteRoot) {
+  const checked = [];
+  for (const page of pages) {
+    const baseUrl = new URL(pageRoute(page.file), 'https://site.invalid');
+    for (const match of page.html.matchAll(/<a\b[^>]*\bhref=(?:"([^"]*)"|'([^']*)')/gi)) {
+      const href = decodeHtml(match[1] ?? match[2] ?? '');
+      if (!href || href.startsWith('javascript:')) continue;
+      const targetUrl = new URL(href, baseUrl);
+      if (targetUrl.origin !== baseUrl.origin) continue;
+      const baseUrlPath = `${basePath}/`;
+      assert(
+        targetUrl.pathname === basePath || targetUrl.pathname.startsWith(baseUrlPath),
+        `${page.file}: internal link is outside the Pages base path: ${href}`,
+      );
+
+      const relativeTarget = decodeURIComponent(targetUrl.pathname.slice(basePath.length)).replace(/^\/+/, '');
+      const targetPath = resolve(siteRoot, relativeTarget);
+      assert(
+        targetPath === resolve(siteRoot) || targetPath.startsWith(`${resolve(siteRoot)}${sep}`),
+        `${page.file}: internal link escapes the generated site: ${href}`,
+      );
+      const candidates = targetUrl.pathname.endsWith('/')
+        ? [join(targetPath, 'index.html')]
+        : [targetPath, join(targetPath, 'index.html')];
+      let exists = false;
+      for (const candidate of candidates) {
+        try {
+          if ((await stat(candidate)).isFile()) {
+            exists = true;
+            break;
+          }
+        } catch (error) {
+          if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+        }
+      }
+      assert(exists, `${page.file}: internal link target does not exist: ${href}`);
+      checked.push(href);
+    }
+  }
+  return checked.length;
 }
 
 try {
@@ -83,26 +142,26 @@ try {
   assert(openapiPage.html.includes('/widgets'), 'OpenAPI operation page must render its path.');
   assert(openapiPage.html.includes('Widget'), 'OpenAPI operation page must render its response schema.');
   assert(openapiPage.html.includes('Related typed widget settings'), 'OpenAPI operation page must link its bound component schema.');
-  assert.match(openapiPage.html, /href="\.\.\/schemas\/openapi\/widgetsettings"/, 'OpenAPI binding link must resolve from the operation page.');
+  assert.match(openapiPage.html, /href="\.\.\/\.\.\/schemas\/openapi\/widgetsettings"/, 'OpenAPI binding link must resolve from the operation page.');
 
   const componentPage = pageAtRoute('docs/openapi/schemas/openapi/widgetsettings/index.html', 'WidgetSettings', 'bound OpenAPI component schema');
   assert(componentPage.html.includes('mode'), 'Component schema page must render the typed field.');
   assert(componentPage.html.includes('draft'), 'Component schema page must render the source example.');
   const schemaIndexPage = pageAtRoute('docs/openapi/schemas/index.html', 'Schema components', 'schema component index');
-  assert.match(schemaIndexPage.html, /href="\.\/schemas\/openapi\/widgetsettings"/, 'Schema index links must resolve to generated components.');
+  assert.match(schemaIndexPage.html, /href="openapi\/widgetsettings"/, 'Schema index links must resolve to generated components.');
 
   const asyncApiPage = pageAtRoute('docs/asyncapi/unknown/receiveWidgetCreated/index.html', 'WidgetCreated', 'native AsyncAPI operation');
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
   assert(asyncApiPage.html.includes('Embedded widget event JSON'), 'AsyncAPI operation page must link its embedded JSON component.');
   assert(asyncApiPage.html.includes('Widget event data schema'), 'AsyncAPI operation page must expose the bound JSON-in-string schema.');
-  assert.match(asyncApiPage.html, /href="\.\.\/\.\.\/openapi\/schemas\/embedded-schemas\/widgeteventdata"/, 'AsyncAPI schema link must resolve from the operation page.');
+  assert.match(asyncApiPage.html, /href="\.\.\/\.\.\/\.\.\/openapi\/schemas\/embedded-schemas\/widgeteventdata"/, 'AsyncAPI schema link must resolve from the operation page.');
 
   const embeddedComponentPage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgeteventdata/index.html', 'WidgetEventData', 'embedded JSON component schema');
   assert(embeddedComponentPage.html.includes('requestData'), 'Embedded component page must render request data fields.');
   assert(embeddedComponentPage.html.includes('responseData'), 'Embedded component page must render response data fields.');
   assert(embeddedComponentPage.html.includes('synthetic-relay-state'), 'Embedded component page must render its visibly synthetic nested example.');
-  assert.match(embeddedComponentPage.html, /href="widgetrequestdata"/, 'Embedded fields must link to their named variants.');
-  assert.match(embeddedComponentPage.html, /href="widgetresponsedata"/, 'Embedded fields must link to their named variants.');
+  assert.match(embeddedComponentPage.html, /href="\.\.\/widgetrequestdata"/, 'Embedded fields must link to their named variants.');
+  assert.match(embeddedComponentPage.html, /href="\.\.\/widgetresponsedata"/, 'Embedded fields must link to their named variants.');
 
   const embeddedRequestPage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgetrequestdata/index.html', 'RelayStateRequest', 'request-data variants');
   assert(embeddedRequestPage.html.includes('Variants'), 'Request-data page must show its schema alternatives.');
@@ -125,7 +184,7 @@ try {
   assert(graphqlPage.html.includes('Type: ID!'), 'GraphQL operation page must render its argument type.');
   const graphqlInputPage = pageAtRoute('docs/graphql/types/widgetinput/index.html', 'Typed JSON schema references', 'GraphQL scalar binding');
   assert(graphqlInputPage.html.includes('WidgetSettings'), 'GraphQL type page must link the bound OpenAPI component.');
-  assert.match(graphqlInputPage.html, /href="\.\.\/\.\.\/openapi\/schemas\/openapi\/widgetsettings"/, 'GraphQL type page link must resolve to the generated component.');
+  assert.match(graphqlInputPage.html, /href="\.\.\/\.\.\/\.\.\/openapi\/schemas\/openapi\/widgetsettings"/, 'GraphQL type page link must resolve to the generated component.');
   const guidePage = pageAtRoute('docs/guides/enumerate-devices/index.html', 'Find the devices available to a cloud account.', 'native Fumadocs guide');
   assert(guidePage.html.includes('List all devices available to the account.'), 'Guide page must render its authored Markdown body.');
 
@@ -134,6 +193,51 @@ try {
   for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Schema components', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
   }
+
+  const internalLinks = await assertInternalLinksResolve(pages, outputRoot);
+  assert(internalLinks > 0, 'Smoke test must validate rendered internal links.');
+
+  const automaticBuild = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    timeout: 180_000,
+    env: {
+      ...process.env,
+      API_DOCS_TITLE: 'Automatic JSON schema fixture',
+      API_DOCS_BASE_PATH: basePath,
+      API_DOCS_OPENAPI: 'automatic-content-schema.yaml',
+      API_DOCS_ASYNCAPI: '',
+      API_DOCS_GRAPHQL: '',
+      API_DOCS_GRAPHQL_BINDINGS: '',
+      API_DOCS_DISCOVER: 'false',
+      API_DOCS_SOURCE: fixtureRoot,
+      API_DOCS_GUIDES: '',
+      API_DOCS_OUTPUT: automaticOutputRoot,
+    },
+  });
+  assert.equal(automaticBuild.status, 0, `Automatic contentSchema build failed.\n${automaticBuild.stdout}\n${automaticBuild.stderr}`);
+
+  const automaticFiles = await listFiles(automaticOutputRoot);
+  const automaticPages = await Promise.all(automaticFiles.filter((file) => file.endsWith('.html')).map(async (file) => ({
+    file,
+    html: await readFile(join(automaticOutputRoot, file), 'utf8'),
+  })));
+  const automaticOperation = automaticPages.find(({ file, html }) => file.endsWith(join('sendCloudRequest', 'index.html')) && html.includes('Embedded JSON schemas'));
+  assert(automaticOperation, 'contentSchema references must create links from the operation without a binding manifest.');
+  assert(automaticOperation.html.includes('RequestData'), 'Operation must link the embedded request variants.');
+  assert(automaticOperation.html.includes('ResponseData'), 'Operation must link the embedded response variants.');
+  const automaticRequest = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'requestdata', 'index.html')));
+  assert(automaticRequest?.html.includes('Variants'), 'Automatically discovered request schema must render its variants.');
+  assert(automaticRequest.html.includes('RelayStateRequest'), 'Automatically discovered request schema must link the relay-state command.');
+  const automaticRelayState = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'relaystaterequest', 'index.html')));
+  assert(automaticRelayState?.html.includes('relay_state'), 'Automatically discovered command schema must render nested relay_state.');
+  const automaticResponse = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'responsedata', 'index.html')));
+  assert(automaticResponse?.html.includes('Variants'), 'Automatically discovered response schema must render its variants.');
+  assert(automaticResponse.html.includes('ResultResponse'), 'Automatically discovered response schema must link the result variant.');
+  const automaticResult = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'resultvalue', 'index.html')));
+  assert(automaticResult?.html.includes('value'), 'Automatically discovered result schema must render its nested value.');
+  const automaticInternalLinks = await assertInternalLinksResolve(automaticPages, automaticOutputRoot);
+  assert(automaticInternalLinks > 0, 'Automatic contentSchema build must validate all internal links.');
 
   for (const [guides, expectedMessage] of [
     ['missing-guides', 'Guides directory does not exist: missing-guides'],
@@ -170,7 +274,7 @@ try {
     await stat(assetPath);
   }
 
-  console.log(`Smoke test passed: ${htmlFiles.length} Fumadocs HTML pages and ${assetReferences.length} base-path assets generated.`);
+  console.log(`Smoke test passed: ${htmlFiles.length} Fumadocs HTML pages, ${internalLinks} internal links, ${automaticPages.length} automatic-schema pages, ${automaticInternalLinks} automatic-schema internal links, and ${assetReferences.length} base-path assets generated.`);
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }

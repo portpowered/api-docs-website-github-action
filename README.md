@@ -62,6 +62,8 @@ Inputs accept comma-separated paths or globs relative to `source-directory`. If 
 
 The optional `graphql-bindings` input points to a YAML or JSON manifest inside `source-directory`. It links GraphQL fields that use generic JSON scalars, OpenAPI operations with embedded or generic JSON bodies, and AsyncAPI operations with JSON-in-string schemas to named OpenAPI component schemas. The action generates reference pages from those components and adds links to the GraphQL type and matching operation pages. References are local to the source directory. Example:
 
+Named schemas referenced by OpenAPI or AsyncAPI `contentSchema` declarations are also discovered automatically from the selected input documents. Their component pages render nested fields and alternatives, and matching operation pages link to the discovered schemas even when no binding manifest is supplied.
+
 ```yaml
 graphql:
   - type: FeatureControlRequest

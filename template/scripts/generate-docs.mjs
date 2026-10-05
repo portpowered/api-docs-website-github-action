@@ -13,6 +13,7 @@ await mkdir(contentRoot, { recursive: true });
 
 const schemaBindings = await generateSchemaPages({
   bindingsPath: config.schemaBindings,
+  sourceDocuments: [...config.schemas.openapi, ...config.schemas.asyncapi],
   sourceRoot: config.sourceRoot,
   contentRoot,
 });
