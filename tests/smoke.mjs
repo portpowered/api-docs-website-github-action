@@ -12,10 +12,16 @@ const outputRoot = join(tempRoot, 'site');
 const basePath = '/go-ring';
 const actionVersion = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).version;
 const reusableWorkflow = await readFile(join(repoRoot, '.github', 'workflows', 'publish.yml'), 'utf8');
-assert(
-  reusableWorkflow.includes(`uses: portpowered/api-docs-website-github-action@v${actionVersion}`),
-  'Reusable workflow must invoke the composite action at its own release version.',
-);
+assert(reusableWorkflow.includes('repository: portpowered/api-docs-website-github-action'),
+  'Reusable workflow must check out the generator repository explicitly.');
+assert(reusableWorkflow.includes('ref: ${{ inputs.action-ref }}'),
+  'Reusable workflow must allow callers to pin an exact generator ref.');
+assert(reusableWorkflow.includes('uses: ./.api-docs-action'),
+  'Reusable workflow must invoke the checked-out generator source.');
+assert(reusableWorkflow.includes("graphql-bindings: ${{ inputs['graphql-bindings'] }}"),
+  'Reusable workflow must forward schema bindings to the composite action.');
+assert(reusableWorkflow.includes(`default: v${actionVersion}`),
+  'Reusable workflow default action-ref must remain on the current stable release tag.');
 assert(reusableWorkflow.includes('guides-directory: ${{ inputs.guides-directory }}'),
   'Reusable workflow must forward the guides directory.');
 

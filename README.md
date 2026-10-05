@@ -38,6 +38,8 @@ jobs:
 
 The caller repository must enable GitHub Pages with **GitHub Actions** as the build and deployment source. The reusable workflow checks out the caller's source, generates the site, uploads the Pages artifact, and deploys it.
 
+The reusable workflow defaults `action-ref` to the current stable generator tag. Set `action-ref` to a verified full commit SHA when a docs change needs a specific generator revision; the workflow checks out that exact generator source and runs it locally.
+
 ## Composite action
 
 Use the action in an existing workflow when deployment is managed separately:

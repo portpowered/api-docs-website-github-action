@@ -20,6 +20,15 @@ on:
         description: Comma-separated paths or globs for GraphQL documents.
         required: false
         type: string
+      graphql-bindings:
+        description: Optional YAML or JSON manifest linking generic JSON payload fields to named schema components.
+        required: false
+        type: string
+      action-ref:
+        description: Tag, branch, or commit SHA of the API docs generator source.
+        required: false
+        type: string
+        default: v0.3.1
       discover:
         description: Discover supported schemas in the repository.
         required: false
@@ -56,15 +65,22 @@ jobs:
     steps:
       - name: Check out caller repository
         uses: actions/checkout@v4
+      - name: Check out API docs generator
+        uses: actions/checkout@v4
+        with:
+          repository: portpowered/api-docs-website-github-action
+          ref: ${{ inputs.action-ref }}
+          path: .api-docs-action
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Generate API reference website
-        uses: portpowered/api-docs-website-github-action@v0.3.1
+        uses: ./.api-docs-action
         with:
           title: ${{ inputs.title }}
           openapi: ${{ inputs.openapi }}
           asyncapi: ${{ inputs.asyncapi }}
           graphql: ${{ inputs.graphql }}
+          graphql-bindings: ${{ inputs['graphql-bindings'] }}
           discover: ${{ inputs.discover }}
           source-directory: ${{ inputs.source-directory }}
           guides-directory: ${{ inputs.guides-directory }}
