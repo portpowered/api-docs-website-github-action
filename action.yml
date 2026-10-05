@@ -14,6 +14,9 @@ inputs:
   graphql:
     description: Comma-separated paths or globs for GraphQL SDL documents.
     required: false
+  graphql-bindings:
+    description: Optional YAML or JSON manifest linking GraphQL fields, OpenAPI operations, and AsyncAPI operations to named OpenAPI component schemas; paths are relative to source-directory.
+    required: false
   discover:
     description: Discover supported schemas in the source directory.
     required: false
@@ -51,6 +54,7 @@ runs:
         API_DOCS_OPENAPI: ${{ inputs.openapi }}
         API_DOCS_ASYNCAPI: ${{ inputs.asyncapi }}
         API_DOCS_GRAPHQL: ${{ inputs.graphql }}
+        API_DOCS_GRAPHQL_BINDINGS: ${{ inputs.graphql-bindings }}
         API_DOCS_DISCOVER: ${{ inputs.discover }}
         API_DOCS_SOURCE: ${{ inputs.source-directory }}
         API_DOCS_GUIDES: ${{ inputs.guides-directory }}

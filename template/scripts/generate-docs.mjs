@@ -5,22 +5,48 @@ import { generateFiles as generateAsyncAPIFiles } from '@fumadocs/asyncapi';
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { createAsyncAPI } from '@fumadocs/asyncapi/server';
 import { generateGraphQLFiles } from '../../scripts/graphql.mjs';
+import { addAsyncAPIBindingLinks, addOpenAPIBindingLinks, addSchemaPagesToOpenAPIMeta, generateSchemaPages } from '../../scripts/schema-pages.mjs';
 import config from '../lib/site-config.json' with { type: 'json' };
 
 const contentRoot = path.join(process.cwd(), 'content/docs');
 await mkdir(contentRoot, { recursive: true });
 
+const schemaBindings = await generateSchemaPages({
+  bindingsPath: config.schemaBindings,
+  sourceRoot: config.sourceRoot,
+  contentRoot,
+});
+
 if (config.schemas.openapi.length) {
   const openapi = createOpenAPI({ input: config.schemas.openapi });
-  await generateOpenAPIFiles({ input: openapi, output: path.join(contentRoot, 'openapi'), per: 'operation', groupBy: 'tag', meta: true });
+  await generateOpenAPIFiles({
+    input: openapi,
+    output: path.join(contentRoot, 'openapi'),
+    per: 'operation',
+    groupBy: 'tag',
+    meta: true,
+    beforeWrite(files) {
+      addOpenAPIBindingLinks(files, schemaBindings.openapi);
+    },
+  });
 }
+if (schemaBindings.pages.length) await addSchemaPagesToOpenAPIMeta(contentRoot);
 
 if (config.schemas.asyncapi.length) {
   const asyncapi = createAsyncAPI({ input: config.schemas.asyncapi });
-  await generateAsyncAPIFiles({ input: asyncapi, output: path.join(contentRoot, 'asyncapi'), per: 'operation', groupBy: 'tag', meta: true });
+  await generateAsyncAPIFiles({
+    input: asyncapi,
+    output: path.join(contentRoot, 'asyncapi'),
+    per: 'operation',
+    groupBy: 'tag',
+    meta: true,
+    beforeWrite(files) {
+      addAsyncAPIBindingLinks(files, schemaBindings.asyncapi);
+    },
+  });
 }
 
-if (config.schemas.graphql.length) await generateGraphQLFiles(config.schemas.graphql, contentRoot);
+if (config.schemas.graphql.length) await generateGraphQLFiles(config.schemas.graphql, contentRoot, { schemaBindings: schemaBindings.graphql });
 
 const landing = ['---', `title: ${JSON.stringify(config.title)}`, 'description: API reference generated from the source schemas.', '---', '', `# ${config.title}`, '', 'Browse the API reference in the sidebar.', ''].join('\n');
 await writeFile(path.join(contentRoot, 'index.mdx'), landing);

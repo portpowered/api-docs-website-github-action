@@ -26,3 +26,14 @@ components:
       properties:
         id:
           type: string
+    WidgetSettings:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [draft, published]
+      example:
+        mode: draft
+      x-example-evidence: synthetic

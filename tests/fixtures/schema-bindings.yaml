@@ -1,0 +1,26 @@
+graphql:
+  - type: WidgetInput
+    field: settings
+    title: Known widget setting schemas
+    description: The JSON field resolves to this named schema component.
+    schemas:
+      - document: openapi.yaml
+        component: WidgetSettings
+openapi:
+  - document: openapi.yaml
+    path: /widgets
+    method: get
+    title: Related typed widget settings
+    description: See the named schema component for its fields and example.
+    schemas:
+      - document: openapi.yaml
+        component: WidgetSettings
+asyncapi:
+  - document: asyncapi3.yaml
+    operationId: receiveWidgetCreated
+    title: Embedded widget event JSON
+    description: The JSON string field is described by its named component schema.
+    schemas:
+      - document: embedded-schemas.yaml
+        component: WidgetEventData
+        label: Widget event data schema

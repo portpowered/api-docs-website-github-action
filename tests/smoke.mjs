@@ -41,6 +41,7 @@ try {
       API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml',
       API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml',
       API_DOCS_GRAPHQL: 'schema.graphql',
+      API_DOCS_GRAPHQL_BINDINGS: 'schema-bindings.yaml',
       API_DOCS_DISCOVER: 'false',
       API_DOCS_SOURCE: fixtureRoot,
       API_DOCS_GUIDES: 'guides',
@@ -75,9 +76,40 @@ try {
   assert.match(openapiPage.html, /GET/i, 'OpenAPI operation page must render the HTTP method.');
   assert(openapiPage.html.includes('/widgets'), 'OpenAPI operation page must render its path.');
   assert(openapiPage.html.includes('Widget'), 'OpenAPI operation page must render its response schema.');
+  assert(openapiPage.html.includes('Related typed widget settings'), 'OpenAPI operation page must link its bound component schema.');
+  assert.match(openapiPage.html, /href="\.\.\/schemas\/openapi\/widgetsettings"/, 'OpenAPI binding link must resolve from the operation page.');
+
+  const componentPage = pageAtRoute('docs/openapi/schemas/openapi/widgetsettings/index.html', 'WidgetSettings', 'bound OpenAPI component schema');
+  assert(componentPage.html.includes('mode'), 'Component schema page must render the typed field.');
+  assert(componentPage.html.includes('draft'), 'Component schema page must render the source example.');
+  const schemaIndexPage = pageAtRoute('docs/openapi/schemas/index.html', 'Schema components', 'schema component index');
+  assert.match(schemaIndexPage.html, /href="\.\/schemas\/openapi\/widgetsettings"/, 'Schema index links must resolve to generated components.');
 
   const asyncApiPage = pageAtRoute('docs/asyncapi/unknown/receiveWidgetCreated/index.html', 'WidgetCreated', 'native AsyncAPI operation');
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
+  assert(asyncApiPage.html.includes('Embedded widget event JSON'), 'AsyncAPI operation page must link its embedded JSON component.');
+  assert(asyncApiPage.html.includes('Widget event data schema'), 'AsyncAPI operation page must expose the bound JSON-in-string schema.');
+  assert.match(asyncApiPage.html, /href="\.\.\/\.\.\/openapi\/schemas\/embedded-schemas\/widgeteventdata"/, 'AsyncAPI schema link must resolve from the operation page.');
+
+  const embeddedComponentPage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgeteventdata/index.html', 'WidgetEventData', 'embedded JSON component schema');
+  assert(embeddedComponentPage.html.includes('requestData'), 'Embedded component page must render request data fields.');
+  assert(embeddedComponentPage.html.includes('responseData'), 'Embedded component page must render response data fields.');
+  assert(embeddedComponentPage.html.includes('synthetic-relay-state'), 'Embedded component page must render its visibly synthetic nested example.');
+  assert.match(embeddedComponentPage.html, /href="widgetrequestdata"/, 'Embedded fields must link to their named variants.');
+  assert.match(embeddedComponentPage.html, /href="widgetresponsedata"/, 'Embedded fields must link to their named variants.');
+
+  const embeddedRequestPage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgetrequestdata/index.html', 'RelayStateRequest', 'request-data variants');
+  assert(embeddedRequestPage.html.includes('Variants'), 'Request-data page must show its schema alternatives.');
+  assert(embeddedRequestPage.html.includes('SyntheticRequest'), 'Request-data page must list the synthetic alternative.');
+  const relayStatePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/relaystaterequest/index.html', 'relay_state', 'nested relay state request fields');
+  assert(relayStatePage.html.includes('relay_state'), 'Relay-state schema page must render its nested field.');
+
+  const embeddedResponsePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgetresponsedata/index.html', 'ResultResponse', 'response-data variants');
+  assert(embeddedResponsePage.html.includes('Variants'), 'Response-data page must show its schema alternatives.');
+  const resultResponsePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/resultresponse/index.html', 'result', 'nested result response');
+  assert(resultResponsePage.html.includes('ResultValue'), 'Result response must link its nested result value schema.');
+  const resultValuePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/resultvalue/index.html', 'value', 'nested result value field');
+  assert(resultValuePage.html.includes('value'), 'Result schema must render its nested value field.');
 
   const catalogPage = pageAtRoute('docs/openapi/unknown/listCatalogItems/index.html', 'listCatalogItems', 'Catalog OpenAPI operation');
   const adminPage = pageAtRoute('docs/openapi/unknown/listAdminWidgets/index.html', 'listAdminWidgets', 'Admin OpenAPI operation');
@@ -85,12 +117,15 @@ try {
 
   const graphqlPage = pageAtRoute('docs/graphql/operations/query/widget/index.html', 'Operation: query', 'GraphQL query');
   assert(graphqlPage.html.includes('Type: ID!'), 'GraphQL operation page must render its argument type.');
+  const graphqlInputPage = pageAtRoute('docs/graphql/types/widgetinput/index.html', 'Typed JSON schema references', 'GraphQL scalar binding');
+  assert(graphqlInputPage.html.includes('WidgetSettings'), 'GraphQL type page must link the bound OpenAPI component.');
+  assert.match(graphqlInputPage.html, /href="\.\.\/\.\.\/openapi\/schemas\/openapi\/widgetsettings"/, 'GraphQL type page link must resolve to the generated component.');
   const guidePage = pageAtRoute('docs/guides/enumerate-devices/index.html', 'Find the devices available to a cloud account.', 'native Fumadocs guide');
   assert(guidePage.html.includes('List all devices available to the account.'), 'Guide page must render its authored Markdown body.');
 
   const docsIndex = pages.find(({ file }) => file === join('docs', 'index.html'));
   assert(docsIndex, 'Fumadocs docs landing page must be exported.');
-  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Device guides', 'Enumerate devices']) {
+  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Schema components', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
   }
 

@@ -1,6 +1,12 @@
 """Synthetic fixture for the documentation build smoke test."""
+scalar JSON
+
 type Query {
   widget(id: ID!): Widget
+}
+
+input WidgetInput {
+  settings: JSON
 }
 
 type Widget {
