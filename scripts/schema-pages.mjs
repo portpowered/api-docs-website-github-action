@@ -31,14 +31,59 @@ function schemaRoute(document, component) {
   return `openapi/schemas/${documentSlug(document)}/${slug(component)}`;
 }
 
-function propertyType(schema) {
-  if (schema.$ref) return schema.$ref.split('/').at(-1).replaceAll('~1', '/').replaceAll('~0', '~');
-  if (schema.oneOf) return schema.oneOf.map(propertyType).join(' or ');
-  if (schema.anyOf) return schema.anyOf.map(propertyType).join(' or ');
-  if (schema.allOf) return schema.allOf.map(propertyType).join(' and ');
-  if (schema.type === 'array') return `${propertyType(schema.items ?? {})}[]`;
+function schemaType(schema, sourceRoot, sourceFile, urlFor) {
+  if (!schema || typeof schema !== 'object') return 'open JSON value';
+  if (schema.$ref) {
+    const reference = localSchemaRef(schema.$ref, sourceFile);
+    if (!reference) return schema.$ref.split('/').at(-1).replaceAll('~1', '/').replaceAll('~0', '~');
+    const document = path.relative(sourceRoot, reference.file).replaceAll('\\', '/');
+    const name = reference.name;
+    return `[${escapeMdxText(name)}](${urlFor(document, name)})`;
+  }
+  if (schema.contentSchema?.$ref) return schemaType(schema.contentSchema, sourceRoot, sourceFile, urlFor);
+  if (schema.oneOf || schema.anyOf || schema.allOf) {
+    const variants = schema.oneOf ?? schema.anyOf ?? schema.allOf;
+    const joiner = schema.allOf ? ' and ' : ' or ';
+    return variants.map((variant) => schemaType(variant, sourceRoot, sourceFile, urlFor)).join(joiner);
+  }
+  if (schema.type === 'array') return `${schemaType(schema.items ?? {}, sourceRoot, sourceFile, urlFor)}[]`;
+  if (Array.isArray(schema.type)) return schema.type.join(' or ');
   if (schema.type) return schema.format ? `${schema.type} (${schema.format})` : schema.type;
+  if (schema.properties && Object.keys(schema.properties).length) return 'object';
   return 'open JSON value';
+}
+
+function enumValues(schema) {
+  if (Array.isArray(schema?.enum)) return schema.enum;
+  if (Object.prototype.hasOwnProperty.call(schema ?? {}, 'const')) return [schema.const];
+  return [];
+}
+
+function collectInlineFields(schema, prefix = '', rows = [], visited = new Set()) {
+  if (!schema || typeof schema !== 'object' || visited.has(schema)) return rows;
+  visited.add(schema);
+
+  const required = new Set(schema.required ?? []);
+  for (const [name, field] of Object.entries(schema.properties ?? {})) {
+    const fieldPath = prefix ? `${prefix}.${name}` : name;
+    rows.push({ path: fieldPath, schema: field, required: required.has(name) });
+    collectInlineFields(field, fieldPath, rows, visited);
+
+    if (field?.type === 'array' && field.items && typeof field.items === 'object') {
+      const itemPath = `${fieldPath}[]`;
+      rows.push({ path: itemPath, schema: field.items, required: false });
+      collectInlineFields(field.items, itemPath, rows, visited);
+    }
+  }
+
+  for (const key of ['oneOf', 'anyOf', 'allOf']) {
+    for (const [index, variant] of (schema[key] ?? []).entries()) {
+      if (!variant?.$ref) collectInlineFields(variant, `${prefix ? `${prefix}.` : ''}<${key} ${index + 1}>`, rows, visited);
+    }
+  }
+
+  visited.delete(schema);
+  return rows;
 }
 
 function schemaReferences(value, found = []) {
@@ -64,39 +109,33 @@ function typePageBody(sourceRoot, sourceFile, component, schema, urlFor) {
   const lines = [];
   if (schema.description) lines.push(escapeMdxText(schema.description.trim()), '');
 
+  const componentType = Array.isArray(schema.type) ? schema.type.join(' or ') : schema.type;
+  if (componentType) lines.push(`**Type:** ${escapeMdxText(componentType)}`, '');
+  if (schema.format) lines.push(`**Format:** ${escapeMdxText(schema.format)}`, '');
+  const componentValues = enumValues(schema);
+  if (componentValues.length) {
+    lines.push(`**Allowed values:** ${componentValues.map((value) => `\`${escapeMdxInlineCode(JSON.stringify(value))}\``).join(', ')}`, '');
+  }
+
   if (schema.oneOf || schema.anyOf || schema.allOf) {
     const variants = schema.oneOf ?? schema.anyOf ?? schema.allOf;
     const heading = schema.oneOf ? 'Variants' : schema.anyOf ? 'Accepted alternatives' : 'Composed schemas';
     lines.push(`## ${heading}`, '');
-    for (const variant of variants) {
-      if (variant.$ref) {
-        const reference = localSchemaRef(variant.$ref, sourceFile);
-        const name = reference?.name ?? variant.$ref.split('/').at(-1).replaceAll('~1', '/').replaceAll('~0', '~');
-        const document = reference ? path.relative(sourceRoot, reference.file).replaceAll('\\', '/') : undefined;
-        const target = document ? urlFor(document, name) : undefined;
-        lines.push(target ? `- [${escapeMdxText(name)}](${target})` : `- ${escapeMdxText(name)}`);
-      } else {
-        lines.push(`- ${escapeMdxText(propertyType(variant))}`);
-      }
-    }
+    for (const variant of variants) lines.push(`- ${schemaType(variant, sourceRoot, sourceFile, urlFor)}`);
     lines.push('');
   }
 
-  if (schema.properties && Object.keys(schema.properties).length) {
-    const required = new Set(schema.required ?? []);
-    lines.push('## Fields', '', '| Field | Type | Required |', '|---|---|---|');
-    for (const [name, field] of Object.entries(schema.properties)) {
-      const ref = field.$ref ?? field.contentSchema?.$ref;
-      const reference = ref ? localSchemaRef(ref, sourceFile) : undefined;
-      const targetName = reference?.name;
-      const targetDocument = reference ? path.relative(sourceRoot, reference.file).replaceAll('\\', '/') : undefined;
-      const type = targetName && targetDocument
-        ? `[${escapeMdxText(targetName)}](${urlFor(targetDocument, targetName)})`
-        : escapeMdxText(propertyType(field));
-      const requiredValue = required.has(name) ? 'Yes' : 'No';
+  const fields = collectInlineFields(schema);
+  if (fields.length) {
+    lines.push('## Fields', '', '| Field | Type | Required | Allowed values |', '|---|---|---|---|');
+    for (const row of fields) {
+      const { path: fieldPath, schema: field, required } = row;
+      const type = schemaType(field, sourceRoot, sourceFile, urlFor);
+      const requiredValue = required ? 'Yes' : 'No';
+      const values = enumValues(field).map((value) => `\`${escapeMdxInlineCode(JSON.stringify(value))}\``).join(', ');
       const contentType = field.contentMediaType ? `; embedded content: ${field.contentMediaType}` : '';
-      lines.push(`| \`${escapeMdxInlineCode(name)}\` | ${type}${escapeMdxText(contentType)} | ${requiredValue} |`);
-      if (field.description) lines.push(`|  | ${escapeMdxText(field.description)} |  |`);
+      lines.push(`| \`${escapeMdxInlineCode(fieldPath)}\` | ${type}${escapeMdxText(contentType)} | ${requiredValue} | ${values} |`);
+      if (field.description) lines.push(`|  | ${escapeMdxText(field.description)} |  |  |`);
     }
     lines.push('');
   }
@@ -201,12 +240,17 @@ function addDiscoveredBindings(explicit, discovered, matches) {
  * Generate navigable OpenAPI component pages referenced by bindings or contentSchema fields.
  * Each referenced component and its nested named components get a page with schema fields and examples.
  */
-export async function generateSchemaPages({ bindingsPath, sourceDocuments = [], sourceRoot, contentRoot }) {
+export async function generateSchemaPages({ bindingsPath, sourceDocuments = [], sourceRoot, contentRoot, extraBindings = {} }) {
   let bindings = { graphql: [], openapi: [], asyncapi: [] };
   if (bindingsPath) {
     const bindingsSource = await readFile(bindingsPath, 'utf8');
     const bindingsDocument = /\.json$/i.test(bindingsPath) ? JSON.parse(bindingsSource) : parseYaml(bindingsSource);
     bindings = parseBindings(bindingsDocument);
+  }
+  for (const kind of ['graphql', 'openapi', 'asyncapi']) {
+    const additional = extraBindings[kind] ?? [];
+    if (!Array.isArray(additional)) throw new Error(`Additional ${kind} schema bindings must be an array.`);
+    bindings[kind].push(...additional);
   }
   const documents = new Map();
   const pageSchemas = new Map();
