@@ -88,12 +88,11 @@ function renderSchemaBindings(typeName, schemaBindings) {
   const bindings = schemaBindings.filter((binding) => binding.type === typeName);
   if (!bindings.length) return '';
   const currentRoute = path.posix.join('graphql', 'types', slug(typeName));
-  const currentRouteDirectory = path.posix.dirname(currentRoute);
   const sections = bindings.map((binding) => {
     const description = binding.description?.trim();
     const links = binding.targets.map((target) => {
       const targetRoute = String(target.url).replace(/^\/+/, '');
-      const relativeUrl = path.posix.relative(currentRouteDirectory, targetRoute) || '.';
+      const relativeUrl = path.posix.relative(currentRoute, targetRoute) || '.';
       return `- [${escapeMdxText(target.label)}](${relativeUrl})`;
     });
     return `### ${escapeMdxText(binding.field)}\n\n${description ? `${escapeMdxText(description)}\n\n` : ''}${links.join('\n')}`;

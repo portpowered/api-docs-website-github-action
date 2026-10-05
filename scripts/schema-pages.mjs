@@ -160,28 +160,73 @@ function parseBindings(document) {
   return { graphql, openapi, asyncapi };
 }
 
+function localPointerReference(ref, currentFile) {
+  const [filePart, pointer = ''] = String(ref).split('#', 2);
+  if (/^[a-z][a-z0-9+.-]*:/i.test(filePart)) return undefined;
+  const file = filePart ? path.resolve(path.dirname(currentFile), filePart) : currentFile;
+  const segments = pointer.startsWith('/')
+    ? pointer.slice(1).split('/').map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'))
+    : [];
+  return { file, segments };
+}
+
+function pointerValue(document, segments) {
+  let value = document;
+  for (const segment of segments) {
+    if (value === null || typeof value !== 'object') return undefined;
+    value = value[segment];
+  }
+  return value;
+}
+
+function uniqueSchemaReferences(references) {
+  return [...new Map(references.map((reference) => [
+    `${reference.document}#${reference.component}`,
+    reference,
+  ])).values()];
+}
+
+function addDiscoveredBindings(explicit, discovered, matches) {
+  for (const binding of discovered) {
+    const existing = explicit.find((candidate) => matches(candidate, binding));
+    if (!existing) {
+      explicit.push(binding);
+      continue;
+    }
+    existing.schemas = uniqueSchemaReferences([...existing.schemas, ...binding.schemas]);
+  }
+}
+
 /**
- * Generate navigable OpenAPI component pages referenced by the schema bindings manifest.
+ * Generate navigable OpenAPI component pages referenced by bindings or contentSchema fields.
  * Each referenced component and its nested named components get a page with schema fields and examples.
  */
-export async function generateSchemaPages({ bindingsPath, sourceRoot, contentRoot }) {
-  if (!bindingsPath) return { graphql: [], openapi: [], asyncapi: [], pages: [] };
-  const bindingsSource = await readFile(bindingsPath, 'utf8');
-  const bindingsDocument = /\.json$/i.test(bindingsPath) ? JSON.parse(bindingsSource) : parseYaml(bindingsSource);
-  const bindings = parseBindings(bindingsDocument);
+export async function generateSchemaPages({ bindingsPath, sourceDocuments = [], sourceRoot, contentRoot }) {
+  let bindings = { graphql: [], openapi: [], asyncapi: [] };
+  if (bindingsPath) {
+    const bindingsSource = await readFile(bindingsPath, 'utf8');
+    const bindingsDocument = /\.json$/i.test(bindingsPath) ? JSON.parse(bindingsSource) : parseYaml(bindingsSource);
+    bindings = parseBindings(bindingsDocument);
+  }
   const documents = new Map();
   const pageSchemas = new Map();
+
+  async function loadDocument(documentPath) {
+    const normalized = path.posix.normalize(String(documentPath).replaceAll('\\', '/'));
+    let loaded = documents.get(normalized);
+    if (!loaded) {
+      loaded = await readDocument(sourceRoot, normalized);
+      documents.set(normalized, loaded);
+    }
+    return loaded;
+  }
 
   async function loadComponent(reference) {
     if (!reference || typeof reference.document !== 'string' || typeof reference.component !== 'string') {
       throw new Error('Each schema binding requires document and component strings.');
     }
     const documentPath = path.posix.normalize(reference.document.replaceAll('\\', '/'));
-    let loaded = documents.get(documentPath);
-    if (!loaded) {
-      loaded = await readDocument(sourceRoot, documentPath);
-      documents.set(documentPath, loaded);
-    }
+    const loaded = await loadDocument(documentPath);
     const schema = loaded.document.components?.schemas?.[reference.component];
     if (!schema) throw new Error(`${documentPath} does not define schema component ${reference.component}.`);
     const key = `${documentPath}#${reference.component}`;
@@ -196,12 +241,115 @@ export async function generateSchemaPages({ bindingsPath, sourceRoot, contentRoo
     return key;
   }
 
+  async function discoverEmbeddedSchemas(value, currentFile, found, visited) {
+    if (Array.isArray(value)) {
+      for (const item of value) await discoverEmbeddedSchemas(item, currentFile, found, visited);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+
+    if (value.contentSchema && typeof value.contentSchema === 'object') {
+      for (const ref of schemaReferences(value.contentSchema)) {
+        const resolved = localSchemaRef(ref, currentFile);
+        if (!resolved) continue;
+        const reference = {
+          document: path.relative(sourceRoot, resolved.file).replaceAll('\\', '/'),
+          component: resolved.name,
+          label: resolved.name,
+        };
+        found.set(`${reference.document}#${reference.component}`, reference);
+        await loadComponent(reference);
+      }
+      await discoverEmbeddedSchemas(value.contentSchema, currentFile, found, visited);
+    }
+
+    if (typeof value.$ref === 'string') {
+      const resolved = localPointerReference(value.$ref, currentFile);
+      if (resolved) {
+        const key = `${resolved.file}#${resolved.segments.join('/')}`;
+        if (!visited.has(key)) {
+          visited.add(key);
+          const documentPath = path.relative(sourceRoot, resolved.file).replaceAll('\\', '/');
+          const loaded = await loadDocument(documentPath);
+          const target = pointerValue(loaded.document, resolved.segments);
+          if (target !== undefined) {
+            await discoverEmbeddedSchemas(target, loaded.absolute, found, visited);
+          }
+        }
+      }
+    }
+
+    for (const [key, item] of Object.entries(value)) {
+      if (['$ref', 'contentSchema', 'example', 'examples', 'default', 'enum', 'const', 'x-example-evidence'].includes(key)) continue;
+      await discoverEmbeddedSchemas(item, currentFile, found, visited);
+    }
+  }
+
+  const discoveredOpenAPI = [];
+  const discoveredAsyncAPI = [];
+  for (const sourceDocument of sourceDocuments) {
+    const documentPath = path.relative(sourceRoot, sourceDocument).replaceAll('\\', '/');
+    const loaded = await loadDocument(documentPath);
+    const rootReferences = new Map();
+    await discoverEmbeddedSchemas(loaded.document, loaded.absolute, rootReferences, new Set());
+
+    if (loaded.document.openapi) {
+      const methods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
+      for (const [route, pathItem] of Object.entries(loaded.document.paths ?? {})) {
+        for (const [method, operation] of Object.entries(pathItem ?? {})) {
+          if (!methods.has(method.toLowerCase()) || !operation || typeof operation !== 'object') continue;
+          const references = new Map();
+          await discoverEmbeddedSchemas(operation, loaded.absolute, references, new Set());
+          if (references.size === 0) continue;
+          discoveredOpenAPI.push({
+            document: loaded.absolute.replaceAll('\\', '/'),
+            path: route,
+            method: method.toLowerCase(),
+            title: 'Embedded JSON schemas',
+            description: "Named component pages are discovered from this operation's contentSchema declarations.",
+            schemas: uniqueSchemaReferences([...references.values()]),
+          });
+        }
+      }
+    } else if (loaded.document.asyncapi) {
+      const operations = [];
+      if (String(loaded.document.asyncapi).startsWith('3.')) {
+        for (const [id, operation] of Object.entries(loaded.document.operations ?? {})) operations.push({ id, operation });
+      } else {
+        for (const channel of Object.values(loaded.document.channels ?? {})) {
+          for (const operation of Object.values(channel ?? {})) {
+            if (operation && typeof operation.operationId === 'string') operations.push({ id: operation.operationId, operation });
+          }
+        }
+      }
+      for (const { id, operation } of operations) {
+        const references = new Map();
+        await discoverEmbeddedSchemas(operation, loaded.absolute, references, new Set());
+        if (references.size === 0) continue;
+        discoveredAsyncAPI.push({
+          document: loaded.absolute.replaceAll('\\', '/'),
+          operationId: id,
+          title: 'Embedded JSON schemas',
+          description: "Named component pages are discovered from this operation's contentSchema declarations.",
+          schemas: uniqueSchemaReferences([...references.values()]),
+        });
+      }
+    }
+  }
+
+  addDiscoveredBindings(bindings.openapi, discoveredOpenAPI, (left, right) =>
+    left.document === right.document && left.path === right.path && left.method.toLowerCase() === right.method.toLowerCase());
+  addDiscoveredBindings(bindings.asyncapi, discoveredAsyncAPI, (left, right) =>
+    left.document === right.document && left.operationId === right.operationId);
+
   for (const binding of [...bindings.graphql, ...bindings.openapi, ...bindings.asyncapi]) {
     if (!binding || typeof binding !== 'object' || typeof binding.title !== 'string' || !Array.isArray(binding.schemas) || binding.schemas.length === 0) {
       throw new Error('Each GraphQL/OpenAPI/AsyncAPI binding requires title and a non-empty schemas array.');
     }
     for (const reference of binding.schemas) await loadComponent(reference);
   }
+
+  if (pageSchemas.size === 0) return { graphql: [], openapi: [], asyncapi: [], pages: [] };
 
   const urls = new Map();
   for (const [key, item] of pageSchemas) urls.set(key, schemaRoute(item.document, item.component));
@@ -224,7 +372,7 @@ export async function generateSchemaPages({ bindingsPath, sourceRoot, contentRoo
     const page = typePageBody(sourceRoot, item.absolute, item.component, item.schema, (source, component) => {
       const target = urlFor(source, component);
       const current = schemaRoute(item.document, item.component);
-      return path.posix.relative(path.posix.dirname(current), target) || '.';
+      return path.posix.relative(current, target) || '.';
     });
     await writeFile(filePath, page, 'utf8');
   }
@@ -234,7 +382,7 @@ export async function generateSchemaPages({ bindingsPath, sourceRoot, contentRoo
     index.push(`## ${escapeMdxText(group.document)}`, '');
     for (const component of [...new Set(group.pages)].sort()) {
       const item = [...pageSchemas.values()].find((entry) => entry.document === group.document && slug(entry.component) === component);
-      index.push(`- [${escapeMdxText(item.component)}](./schemas/${docSlug}/${component})`);
+      index.push(`- [${escapeMdxText(item.component)}](${docSlug}/${component})`);
     }
     index.push('');
   }
@@ -315,10 +463,9 @@ function addOperationBindingLinks(files, bindings, routePrefix, operationMatches
       && operations.some((operation) => operationMatches(operation, binding)));
     if (!matching.length) continue;
     const generatedRoute = path.posix.join(routePrefix, file.path.replaceAll('\\', '/').replace(/\.mdx$/, ''));
-    const currentRouteDirectory = path.posix.dirname(generatedRoute);
     const body = matching.map((binding) => {
       const links = binding.targets.map((target) => {
-        const relativeUrl = path.posix.relative(currentRouteDirectory, target.url) || '.';
+        const relativeUrl = path.posix.relative(generatedRoute, target.url) || '.';
         return `<li><a href=${JSON.stringify(relativeUrl)}>${escapeMdxText(target.label)}</a></li>`;
       });
       const description = binding.description ? `${escapeMdxText(binding.description)}\n\n` : '';
