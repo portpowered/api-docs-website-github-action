@@ -84,6 +84,23 @@ function renderTypeLinks(names, typeNames, currentType) {
   return links.length ? `\n\nRelated types: ${links.join(', ')}.\n` : '';
 }
 
+function renderSchemaBindings(typeName, schemaBindings) {
+  const bindings = schemaBindings.filter((binding) => binding.type === typeName);
+  if (!bindings.length) return '';
+  const currentRoute = path.posix.join('graphql', 'types', slug(typeName));
+  const currentRouteDirectory = path.posix.dirname(currentRoute);
+  const sections = bindings.map((binding) => {
+    const description = binding.description?.trim();
+    const links = binding.targets.map((target) => {
+      const targetRoute = String(target.url).replace(/^\/+/, '');
+      const relativeUrl = path.posix.relative(currentRouteDirectory, targetRoute) || '.';
+      return `- [${escapeMdxText(target.label)}](${relativeUrl})`;
+    });
+    return `### ${escapeMdxText(binding.field)}\n\n${description ? `${escapeMdxText(description)}\n\n` : ''}${links.join('\n')}`;
+  });
+  return `\n\n## Typed JSON schema references\n\n${sections.join('\n\n')}`;
+}
+
 function makeFrontmatter(title, description = '') {
   return `---\ntitle: ${quoteYaml(title)}\ndescription: ${quoteYaml(description)}\n---\n\n`;
 }
@@ -99,7 +116,7 @@ async function writeMdx(file, title, description, body) {
  * @param {string[]} files Absolute paths to SDL files.
  * @param {string} contentRoot Absolute path to the Fumadocs `content/docs` directory.
  */
-export async function generateGraphQLFiles(files, contentRoot) {
+export async function generateGraphQLFiles(files, contentRoot, options = {}) {
   const root = path.join(contentRoot, 'graphql');
   const parsedFiles = await Promise.all(files.map(async (file) => ({
     file,
@@ -128,6 +145,13 @@ export async function generateGraphQLFiles(files, contentRoot) {
   }
 
   const typeNames = new Set(typeDefinitions.keys());
+  const schemaBindings = options.schemaBindings ?? [];
+  for (const binding of schemaBindings) {
+    const entries = typeDefinitions.get(binding.type) ?? [];
+    if (!entries.some(({ node }) => node.fields?.some((field) => field.name.value === binding.field))) {
+      throw new Error(`GraphQL schema binding ${binding.type}.${binding.field} does not match a field in the schema.`);
+    }
+  }
   const operationRoots = new Map([
     ['query', 'Query'],
     ['mutation', 'Mutation'],
@@ -148,7 +172,7 @@ export async function generateGraphQLFiles(files, contentRoot) {
     }
     const extra = extensions.get(name) ?? [];
     const code = [...entries, ...extra].map(({ source }) => source).join('\n\n');
-    const body = `${descriptionText(first.node)}# ${name}\n\n\`\`\`graphql\n${code}\n\`\`\`${renderTypeLinks(related, typeNames, name)}`;
+    const body = `${descriptionText(first.node)}# ${name}\n\n\`\`\`graphql\n${code}\n\`\`\`${renderSchemaBindings(name, schemaBindings)}${renderTypeLinks(related, typeNames, name)}`;
     await writeMdx(path.join(root, 'types', `${slug(name)}.mdx`), name, `GraphQL ${first.node.kind.replace(/TypeDefinition$/, '').toLowerCase()} type`, body);
     pages.push(`types/${slug(name)}`);
   }
