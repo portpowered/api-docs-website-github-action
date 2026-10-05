@@ -15,6 +15,16 @@ openapi:
     schemas:
       - document: openapi.yaml
         component: WidgetSettings
+  - document: tp-inline-namespaces.yaml
+    path: /lighting/state
+    method: post
+    title: Nested namespace schemas
+    description: The synthetic operation links to the namespace command and result components.
+    schemas:
+      - document: tp-inline-namespaces.yaml
+        component: SystemGetSysInfoCommand
+      - document: tp-inline-namespaces.yaml
+        component: LightingCommandResult
 asyncapi:
   - document: asyncapi3.yaml
     operationId: receiveWidgetCreated

@@ -6,20 +6,23 @@ import { createOpenAPI } from 'fumadocs-openapi/server';
 import { createAsyncAPI } from '@fumadocs/asyncapi/server';
 import { generateGraphQLFiles } from '../../scripts/graphql.mjs';
 import { addAsyncAPIBindingLinks, addOpenAPIBindingLinks, addSchemaPagesToOpenAPIMeta, generateSchemaPages } from '../../scripts/schema-pages.mjs';
+import { inspectBinaryOpenAPIDocuments, writeBinaryOpenAPIFallbacks } from './binary-openapi.mjs';
 import config from '../lib/site-config.json' with { type: 'json' };
 
 const contentRoot = path.join(process.cwd(), 'content/docs');
 await mkdir(contentRoot, { recursive: true });
 
+const binaryOpenAPI = await inspectBinaryOpenAPIDocuments(config.schemas.openapi, config.sourceRoot);
 const schemaBindings = await generateSchemaPages({
   bindingsPath: config.schemaBindings,
   sourceDocuments: [...config.schemas.openapi, ...config.schemas.asyncapi],
   sourceRoot: config.sourceRoot,
   contentRoot,
+  extraBindings: { openapi: binaryOpenAPI.bindings },
 });
 
-if (config.schemas.openapi.length) {
-  const openapi = createOpenAPI({ input: config.schemas.openapi });
+if (Object.keys(binaryOpenAPI.nativeInputs).length) {
+  const openapi = createOpenAPI({ input: binaryOpenAPI.nativeInputs });
   await generateOpenAPIFiles({
     input: openapi,
     output: path.join(contentRoot, 'openapi'),
@@ -31,6 +34,7 @@ if (config.schemas.openapi.length) {
     },
   });
 }
+await writeBinaryOpenAPIFallbacks(contentRoot, binaryOpenAPI.operations, schemaBindings.openapi);
 if (schemaBindings.pages.length) await addSchemaPagesToOpenAPIMeta(contentRoot);
 
 if (config.schemas.asyncapi.length) {

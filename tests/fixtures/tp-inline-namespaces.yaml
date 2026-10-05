@@ -1,0 +1,57 @@
+openapi: 3.0.3
+info:
+  title: Synthetic nested namespace schema fixture
+  version: 1.0.0
+  description: Synthetic fixture for recursively rendered namespace fields.
+paths:
+  /lighting/state:
+    post:
+      operationId: getLightingState
+      summary: Get lighting state
+      tags: [Lighting]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemGetSysInfoCommand'
+      responses:
+        '200':
+          description: Lighting command result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightingCommandResult'
+components:
+  schemas:
+    SystemGetSysInfoCommand:
+      type: object
+      required: [system]
+      properties:
+        system:
+          type: object
+          required: [get_sysinfo]
+          properties:
+            get_sysinfo:
+              type: string
+              enum: ['']
+    LightingCommandResult:
+      type: object
+      properties:
+        smartlife.iot.smartbulb.lightingservice:
+          type: object
+          properties:
+            get_light_state:
+              $ref: '#/components/schemas/LightState'
+            transition_light_state:
+              $ref: '#/components/schemas/CommandAcknowledgement'
+    LightState:
+      type: object
+      properties:
+        on:
+          type: boolean
+    CommandAcknowledgement:
+      type: object
+      properties:
+        success:
+          type: boolean

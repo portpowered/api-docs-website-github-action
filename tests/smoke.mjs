@@ -103,7 +103,7 @@ try {
       ...process.env,
       API_DOCS_TITLE: 'Smoke Test API Reference',
       API_DOCS_BASE_PATH: basePath,
-      API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml',
+      API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml,protobuf-openapi.yaml,tp-inline-namespaces.yaml',
       API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml',
       API_DOCS_GRAPHQL: 'schema.graphql',
       API_DOCS_GRAPHQL_BINDINGS: 'schema-bindings.yaml',
@@ -144,11 +144,41 @@ try {
   assert(openapiPage.html.includes('Related typed widget settings'), 'OpenAPI operation page must link its bound component schema.');
   assert.match(openapiPage.html, /href="\.\.\/\.\.\/schemas\/openapi\/widgetsettings"/, 'OpenAPI binding link must resolve from the operation page.');
 
+  const protobufPage = pageAtRoute('docs/openapi/fcm/checkInFCMClient/index.html', 'checkInFCMClient', 'binary protobuf operation fallback');
+  assert.match(protobufPage.html, /POST/i, 'Protobuf fallback must show the HTTP method.');
+  assert(protobufPage.html.includes('/checkin'), 'Protobuf fallback must show the request path.');
+  assert(protobufPage.html.includes('https://android.clients.google.com'), 'Protobuf fallback must show the server URL.');
+  assert(protobufPage.html.includes('application/x-protobuf'), 'Protobuf fallback must preserve the media type.');
+  assert(protobufPage.html.includes('format: binary'), 'Protobuf fallback must show the binary wire format.');
+  assert.match(protobufPage.html, /href="[^"]*androidcheckinrequestwire[^"]*">AndroidCheckinRequestWire/, 'Protobuf fallback must link the request wire schema.');
+  assert.match(protobufPage.html, /href="[^"]*androidcheckinresponsewire[^"]*">AndroidCheckinResponseWire/, 'Protobuf fallback must link the 200 response wire schema.');
+  const nativeFcmPage = pageAtRoute('docs/openapi/fcm/registerFCMClient/index.html', 'registerFCMClient', 'native operation retained beside protobuf fallback');
+  assert(nativeFcmPage.html.includes('/register'), 'Native operation must remain in the document after the binary fallback is extracted.');
+  const protobufRequestPage = pageAtRoute('docs/openapi/schemas/protobuf-openapi/androidcheckinrequestwire/index.html', 'AndroidCheckinRequestWire', 'binary protobuf request component');
+  const protobufResponsePage = pageAtRoute('docs/openapi/schemas/protobuf-openapi/androidcheckinresponsewire/index.html', 'AndroidCheckinResponseWire', 'binary protobuf response component');
+  for (const page of [protobufRequestPage, protobufResponsePage]) {
+    assert(page.html.includes('string'), 'Protobuf wire schema must retain its string type.');
+    assert(page.html.includes('binary'), 'Protobuf wire schema must retain its binary format.');
+  }
+
   const componentPage = pageAtRoute('docs/openapi/schemas/openapi/widgetsettings/index.html', 'WidgetSettings', 'bound OpenAPI component schema');
   assert(componentPage.html.includes('mode'), 'Component schema page must render the typed field.');
   assert(componentPage.html.includes('draft'), 'Component schema page must render the source example.');
   const schemaIndexPage = pageAtRoute('docs/openapi/schemas/index.html', 'Schema components', 'schema component index');
   assert.match(schemaIndexPage.html, /href="openapi\/widgetsettings"/, 'Schema index links must resolve to generated components.');
+
+  const sysInfoPage = pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/systemgetsysinfocommand/index.html', 'SystemGetSysInfoCommand', 'nested system namespace component');
+  assert(sysInfoPage.html.includes('system.get_sysinfo'), 'System namespace page must show the recursive field path.');
+  assert(sysInfoPage.html.includes('Yes'), 'System namespace page must show required nested fields.');
+  assert(sysInfoPage.html.includes('string'), 'System namespace page must preserve the nested field type.');
+  assert(sysInfoPage.html.includes('&quot;&quot;') || sysInfoPage.html.includes('""'), 'System namespace page must render the empty-string enum value.');
+  const lightingPage = pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/lightingcommandresult/index.html', 'LightingCommandResult', 'nested lighting namespace component');
+  assert(lightingPage.html.includes('smartlife.iot.smartbulb.lightingservice.get_light_state'), 'Lighting page must render the nested get_light_state row.');
+  assert(lightingPage.html.includes('smartlife.iot.smartbulb.lightingservice.transition_light_state'), 'Lighting page must render the nested transition_light_state row.');
+  assert.match(lightingPage.html, /href="[^"]*lightstate[^"]*">LightState/, 'Lighting page must link its named LightState component.');
+  assert.match(lightingPage.html, /href="[^"]*commandacknowledgement[^"]*">CommandAcknowledgement/, 'Lighting page must link its named CommandAcknowledgement component.');
+  pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/lightstate/index.html', 'LightState', 'named LightState component');
+  pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/commandacknowledgement/index.html', 'CommandAcknowledgement', 'named CommandAcknowledgement component');
 
   const asyncApiPage = pageAtRoute('docs/asyncapi/unknown/receiveWidgetCreated/index.html', 'WidgetCreated', 'native AsyncAPI operation');
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
@@ -190,7 +220,7 @@ try {
 
   const docsIndex = pages.find(({ file }) => file === join('docs', 'index.html'));
   assert(docsIndex, 'Fumadocs docs landing page must be exported.');
-  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Schema components', 'Device guides', 'Enumerate devices']) {
+  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'Check in an FCM client', 'Get lighting state', 'GraphQL API', 'Schema components', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
   }
 

@@ -2,7 +2,7 @@
 
 Generate a static API reference from OpenAPI, AsyncAPI, and GraphQL schema files, then publish it with GitHub Pages.
 
-The action builds a static Next.js site with the default Fumadocs theme and the official Fumadocs OpenAPI and AsyncAPI integrations. Each operation has its own page with the integrations' schema views, request and response details, and code examples. GraphQL SDL is converted into navigable Fumadocs pages. The exported files run on GitHub Pages without a server.
+The action builds a static Next.js site with the default Fumadocs theme and the official Fumadocs OpenAPI and AsyncAPI integrations. Each operation has its own page with request and response details; supported media types also get Fumadocs schema views and code examples. Operations using `application/x-protobuf` get a static page that preserves the media type and links to binary schema components without generating payload bytes. GraphQL SDL is converted into navigable Fumadocs pages. The exported files run on GitHub Pages without a server.
 
 ## Reusable Pages workflow
 
