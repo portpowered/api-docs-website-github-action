@@ -4,6 +4,28 @@ info:
   version: 1.0.0
   description: Synthetic fixture for the documentation build smoke test.
 paths:
+  /legacy-widgets:
+    post:
+      operationId: registerLegacyWidget
+      summary: Register a widget with a legacy JSON content type
+      tags: [Widgets]
+      requestBody:
+        required: true
+        content:
+          plain/text:
+            schema:
+              type: object
+              required: [name, enabled]
+              properties:
+                name: {type: string}
+                enabled: {type: boolean}
+            example: {name: legacy-widget, enabled: true}
+      responses:
+        '200':
+          description: Registered.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Widget'}
   /widgets:
     get:
       operationId: listWidgets

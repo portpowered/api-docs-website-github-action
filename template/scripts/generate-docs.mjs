@@ -5,6 +5,7 @@ import { generateFiles as generateAsyncAPIFiles } from '@fumadocs/asyncapi';
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { createAsyncAPI } from '@fumadocs/asyncapi/server';
 import { generateGraphQLFiles } from '../../scripts/graphql.mjs';
+import { mergeGeneratedFiles } from '../../scripts/generated-files.mjs';
 import config from '../lib/site-config.json' with { type: 'json' };
 
 const contentRoot = path.join(process.cwd(), 'content/docs');
@@ -12,12 +13,12 @@ await mkdir(contentRoot, { recursive: true });
 
 if (config.schemas.openapi.length) {
   const openapi = createOpenAPI({ input: config.schemas.openapi });
-  await generateOpenAPIFiles({ input: openapi, output: path.join(contentRoot, 'openapi'), per: 'operation', groupBy: 'tag', meta: true });
+  await generateOpenAPIFiles({ input: openapi, output: path.join(contentRoot, 'openapi'), per: 'operation', groupBy: 'tag', meta: true, beforeWrite: mergeGeneratedFiles });
 }
 
 if (config.schemas.asyncapi.length) {
   const asyncapi = createAsyncAPI({ input: config.schemas.asyncapi });
-  await generateAsyncAPIFiles({ input: asyncapi, output: path.join(contentRoot, 'asyncapi'), per: 'operation', groupBy: 'tag', meta: true });
+  await generateAsyncAPIFiles({ input: asyncapi, output: path.join(contentRoot, 'asyncapi'), per: 'operation', groupBy: 'tag', meta: true, beforeWrite: mergeGeneratedFiles });
 }
 
 if (config.schemas.graphql.length) await generateGraphQLFiles(config.schemas.graphql, contentRoot);

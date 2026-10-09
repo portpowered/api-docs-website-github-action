@@ -45,6 +45,7 @@ try {
       API_DOCS_SOURCE: fixtureRoot,
       API_DOCS_GUIDES: 'guides',
       API_DOCS_OUTPUT: outputRoot,
+      API_DOCS_JSON_MEDIA_TYPES: 'plain/text',
     },
   });
 
@@ -80,6 +81,9 @@ try {
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
 
   const catalogPage = pageAtRoute('docs/openapi/unknown/listCatalogItems/index.html', 'listCatalogItems', 'Catalog OpenAPI operation');
+  const legacyJSON = pageAtRoute('docs/openapi/widgets/registerLegacyWidget/index.html', 'plain/text', 'nonstandard JSON media operation');
+  assert(legacyJSON.html.includes('legacy-widget'), 'Legacy JSON operation must render the request example.');
+  assert(legacyJSON.html.includes('Content-Type'), 'Legacy JSON operation must render its actual request header.');
   const adminPage = pageAtRoute('docs/openapi/unknown/listAdminWidgets/index.html', 'listAdminWidgets', 'Admin OpenAPI operation');
   assert.notEqual(catalogPage.file, adminPage.file, 'Same-basename OpenAPI inputs must produce distinct routes.');
 
@@ -92,6 +96,9 @@ try {
   assert(docsIndex, 'Fumadocs docs landing page must be exported.');
   for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
+  }
+  for (const operation of ['listCatalogItems', 'listAdminWidgets']) {
+    assert(docsIndex.html.includes(operation), `Merged navigation must include ${operation} from every same-folder input.`);
   }
 
   for (const [guides, expectedMessage] of [
@@ -130,6 +137,29 @@ try {
   }
 
   console.log(`Smoke test passed: ${htmlFiles.length} Fumadocs HTML pages and ${assetReferences.length} base-path assets generated.`);
+  const invalidMedia = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
+    cwd: repoRoot, encoding: 'utf8', timeout: 30_000,
+    env: { ...process.env, API_DOCS_JSON_MEDIA_TYPES: 'plain/text; charset=utf-8' },
+  });
+  assert.notEqual(invalidMedia.status, 0, 'Configured media aliases must be bare media types.');
+  assert(`${invalidMedia.stdout}\n${invalidMedia.stderr}`.includes('Invalid JSON media type'),
+    'Invalid aliases must fail before generating the site.');
+  const referenceOutput = join(tempRoot, 'reference-site');
+  const referenceBuild = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
+    cwd: repoRoot, encoding: 'utf8', timeout: 180_000,
+    env: {
+      ...process.env, API_DOCS_SOURCE: fixtureRoot, API_DOCS_OPENAPI: 'references.openapi.yaml',
+      API_DOCS_ASYNCAPI: '', API_DOCS_GRAPHQL: '', API_DOCS_DISCOVER: 'false',
+      API_DOCS_SCHEMA_VIEW: 'references', API_DOCS_OUTPUT: referenceOutput, API_DOCS_BASE_PATH: basePath,
+    },
+  });
+  assert.equal(referenceBuild.status, 0, `Reference graph export failed.\n${referenceBuild.stdout}\n${referenceBuild.stderr}`);
+  const graphHTML = await readFile(join(referenceOutput, 'docs/openapi/unknown/modifyRecursiveRecord/index.html'), 'utf8');
+  for (const field of ['revision', 'title', 'deleted', 'oneOf', 'allOf', 'Yes']) {
+    assert(graphHTML.includes(field), `Reference graph must render canonical variant/required field ${field}.`);
+  }
+  assert(graphHTML.includes('synthetic-record'), 'The generated request snippet must keep the schema example.');
+  assert(graphHTML.includes('-component-'), 'Named components must have rendered anchor destinations.');
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }

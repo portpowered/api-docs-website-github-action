@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: Recursive reference renderer fixture
+  version: 1.0.0
+paths:
+  /records:
+    post:
+      operationId: modifyRecursiveRecord
+      summary: Modify a recursive record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Mutation'}
+            example: {title: synthetic-record, revision: synthetic-revision}
+      responses:
+        '200':
+          description: Acknowledged.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Mutation'}
+components:
+  schemas:
+    Mutation:
+      allOf:
+        - oneOf:
+            - {$ref: '#/components/schemas/Create'}
+            - {$ref: '#/components/schemas/Delete'}
+        - type: object
+          required: [revision]
+          properties:
+            revision: {type: string}
+    Create:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1}
+        child: {$ref: '#/components/schemas/Mutation'}
+    Delete:
+      type: object
+      required: [deleted]
+      properties:
+        deleted: {type: integer, enum: [1]}

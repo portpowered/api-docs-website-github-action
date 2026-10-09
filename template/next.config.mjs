@@ -7,4 +7,6 @@ export default withMDX({
   trailingSlash: true,
   basePath: site.basePath,
   images: { unoptimized: true },
+  // Keep schema rendering bounded on CI runners with large shared components.
+  experimental: { cpus: 2 },
 });

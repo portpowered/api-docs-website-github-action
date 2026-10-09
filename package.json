@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "npm run test:smoke",
+    "test": "node tests/media-adapters.mjs && node tests/generated-files.mjs && node tests/schema-reference-graph.mjs && npm run test:smoke",
     "test:smoke": "node tests/smoke.mjs"
   },
   "dependencies": {

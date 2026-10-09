@@ -70,3 +70,18 @@ docs/guides/
 The optional `meta.json` is the normal Fumadocs folder metadata file. For example, `{ "title": "Device guides", "pages": ["enumerate", "devices/turn-on"] }` controls the section label and order. Guide files use Fumadocs' built-in Markdown/MDX renderer and supported components.
 
 The `output` directory contains the static site and its assets. On GitHub Actions, the base path defaults to the repository name for project Pages sites. Set `base-path` explicitly for a custom path or a different hosting setup.
+
+Some providers send a JSON request entity with a nonstandard Content-Type. Set
+`json-media-types: plain/text` (or a comma-separated list) only when the checked-in
+contract explicitly describes that behavior. The renderer keeps the original
+media type in the reference, playground and generated requests while encoding
+the body as JSON. This input is available on the composite action and reusable
+workflow; other media types retain their default behavior.
+
+For recursive contracts with nested `allOf`/`oneOf` constraints, set
+`schema-view: references`. The reference renders the canonical conjunctions,
+alternatives, required fields, examples and bounds without multiplying their
+intersections. Named components appear once per body/response, with links to
+their rendered anchors. Request snippets and the playground remain available;
+TypeScript definitions are omitted in this mode. The default `native` view keeps
+the standard Fumadocs tables. Static rendering uses two workers to bound CI load.
