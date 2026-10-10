@@ -53,6 +53,16 @@ on:
         required: false
         type: string
         default: api-docs-out
+      json-media-types:
+        description: Additional media types whose request bodies must use JSON encoding.
+        required: false
+        type: string
+        default: ""
+      schema-view:
+        description: Native tables or a complete component reference graph.
+        required: false
+        type: string
+        default: native
 
 permissions:
   contents: read
@@ -86,6 +96,8 @@ jobs:
           guides-directory: ${{ inputs.guides-directory }}
           base-path: ${{ inputs.base-path }}
           output: ${{ inputs.output }}
+          json-media-types: ${{ inputs.json-media-types }}
+          schema-view: ${{ inputs.schema-view }}
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:

@@ -1,0 +1,37 @@
+asyncapi: 2.6.0
+info:
+  title: Synthetic protobuf bridge
+  version: 1.0.0
+servers:
+  production:
+    url: websocket.example.invalid
+    protocol: wss
+  sandbox:
+    url: sandbox.example.invalid
+    protocol: wss
+  bootstrap:
+    url: '{host}'
+    protocol: wss
+    variables:
+      host:
+        default: websocket.example.invalid
+channels:
+  /v2/{connection}:
+    parameters:
+      connection:
+        description: Hex protobuf connection request.
+        schema: {type: string, pattern: '^[0-9a-f]+$'}
+    publish:
+      message:
+        name: ClientMessage
+        contentType: application/x-protobuf
+        schemaFormat: application/vnd.google.protobuf;version=2
+        payload:
+          $ref: ./bridge.proto
+    subscribe:
+      message:
+        name: ServerMessage
+        contentType: application/x-protobuf
+        schemaFormat: application/vnd.google.protobuf;version=2
+        payload:
+          $ref: ./bridge.proto

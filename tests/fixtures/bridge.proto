@@ -1,0 +1,10 @@
+syntax = "proto2";
+package synthetic.bridge;
+
+message ClientMessage {
+  optional bytes connection_request = 1;
+}
+
+message ServerMessage {
+  optional string notification = 1;
+}

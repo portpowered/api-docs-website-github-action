@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
 import { parse as parseYaml } from 'yaml';
 import { parse as parseGraphQL, Kind } from 'graphql';
+import { writeSchemaPresentations } from './presentations.mjs';
+import { parseJSONMediaTypes } from './json-media-types.mjs';
 
 const actionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = path.resolve(process.env.API_DOCS_SOURCE || '.');
@@ -14,6 +16,9 @@ const title = process.env.API_DOCS_TITLE?.trim() || 'API Documentation';
 const basePath = (process.env.API_DOCS_BASE_PATH || '').trim().replace(/\/$/, '');
 const discover = (process.env.API_DOCS_DISCOVER || 'true').toLowerCase() !== 'false';
 const guidesDirectory = process.env.API_DOCS_GUIDES?.trim();
+const jsonMediaTypes = parseJSONMediaTypes(process.env.API_DOCS_JSON_MEDIA_TYPES);
+const schemaView = process.env.API_DOCS_SCHEMA_VIEW || 'native';
+if (!['native', 'references'].includes(schemaView)) throw new Error(`Invalid schema view: ${schemaView}`);
 
 function patterns(name) {
   return (process.env[`API_DOCS_${name}`] || '').split(',').map((item) => item.trim()).filter(Boolean);
@@ -173,6 +178,8 @@ if (!sourceFromOutput || (!sourceFromOutput.startsWith(`..${path.sep}`) && sourc
 await rm(buildRoot, { recursive: true, force: true });
 await mkdir(path.join(buildRoot, 'content', 'docs'), { recursive: true });
 await cp(path.join(actionRoot, 'template'), buildRoot, { recursive: true });
+const sourceSchemas = structuredClone(schemas);
+Object.assign(schemas, await writeSchemaPresentations(schemas, path.join(buildRoot, 'schemas')));
 if (guidesSource) await cp(guidesSource, path.join(buildRoot, 'content', 'docs', 'guides'), { recursive: true });
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
@@ -185,6 +192,9 @@ const buildConfig = {
   sourceRoot: sourceRoot.replaceAll('\\', '/'),
   schemaBindings: graphqlBindingsPath?.replaceAll('\\', '/'),
   schemas,
+  sourceSchemas,
+  jsonMediaTypes,
+  schemaView,
 };
 await writeFile(path.join(buildRoot, 'lib', 'site-config.json'), JSON.stringify(buildConfig, null, 2));
 

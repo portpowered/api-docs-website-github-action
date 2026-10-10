@@ -104,13 +104,14 @@ try {
       API_DOCS_TITLE: 'Smoke Test API Reference',
       API_DOCS_BASE_PATH: basePath,
       API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml,protobuf-openapi.yaml,tp-inline-namespaces.yaml',
-      API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml',
+      API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml,bridge.asyncapi.yaml',
       API_DOCS_GRAPHQL: 'schema.graphql',
       API_DOCS_GRAPHQL_BINDINGS: 'schema-bindings.yaml',
       API_DOCS_DISCOVER: 'false',
       API_DOCS_SOURCE: fixtureRoot,
       API_DOCS_GUIDES: 'guides',
       API_DOCS_OUTPUT: outputRoot,
+      API_DOCS_JSON_MEDIA_TYPES: 'plain/text,text/plain;charset=UTF-8',
     },
   });
 
@@ -182,6 +183,16 @@ try {
 
   const asyncApiPage = pageAtRoute('docs/asyncapi/unknown/receiveWidgetCreated/index.html', 'WidgetCreated', 'native AsyncAPI operation');
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
+  const asyncApi2Page = pageAtRoute('docs/asyncapi/unknown/publishWidgetCreated/index.html', 'WidgetCreated', 'adapted AsyncAPI 2 operation');
+  assert(asyncApi2Page.html.includes('widgetId'), 'Adapted AsyncAPI 2 must render the original JSON payload.');
+  for (const [id, message] of [['publish_v2_connection', 'ClientMessage'], ['subscribe_v2_connection', 'ServerMessage']]) {
+    const bridge = pageAtRoute(`docs/asyncapi/unknown/${id}/index.html`, message, 'adapted protobuf bridge operation');
+    const visible = bridge.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+    const direction = id.startsWith('publish_') ? 'SEND' : 'RECEIVE';
+    for (const marker of [direction, 'Source schema:', 'Schema format:', 'connection', 'application/x-protobuf', 'application/vnd.google.protobuf;version=2', 'bridge.proto', 'connection_request', 'notification']) {
+      assert(visible.includes(marker), `Protobuf operation ${id} must visibly retain ${marker} outside serialized page data.`);
+    }
+  }
   assert(asyncApiPage.html.includes('Embedded widget event JSON'), 'AsyncAPI operation page must link its embedded JSON component.');
   assert(asyncApiPage.html.includes('Widget event data schema'), 'AsyncAPI operation page must expose the bound JSON-in-string schema.');
   assert.match(asyncApiPage.html, /href="\.\.\/\.\.\/\.\.\/openapi\/schemas\/embedded-schemas\/widgeteventdata"/, 'AsyncAPI schema link must resolve from the operation page.');
@@ -207,6 +218,13 @@ try {
   assert(resultValuePage.html.includes('value'), 'Result schema must render its nested value field.');
 
   const catalogPage = pageAtRoute('docs/openapi/unknown/listCatalogItems/index.html', 'listCatalogItems', 'Catalog OpenAPI operation');
+  const legacyJSON = pageAtRoute('docs/openapi/widgets/registerLegacyWidget/index.html', 'plain/text', 'nonstandard JSON media operation');
+  assert(legacyJSON.html.includes('legacy-widget'), 'Legacy JSON operation must render the request example.');
+  assert(legacyJSON.html.includes('Content-Type'), 'Legacy JSON operation must render its actual request header.');
+  const parameterizedJSON = pageAtRoute('docs/openapi/widgets/logoutWidgetSession/index.html',
+    'text/plain;charset=UTF-8', 'parameterized JSON media operation');
+  assert(parameterizedJSON.html.includes('synthetic-session'), 'Parameterized JSON must render the request example.');
+  assert(parameterizedJSON.html.includes('Content-Type'), 'Parameterized JSON must render its request header.');
   const adminPage = pageAtRoute('docs/openapi/unknown/listAdminWidgets/index.html', 'listAdminWidgets', 'Admin OpenAPI operation');
   assert.notEqual(catalogPage.file, adminPage.file, 'Same-basename OpenAPI inputs must produce distinct routes.');
 
@@ -222,6 +240,9 @@ try {
   assert(docsIndex, 'Fumadocs docs landing page must be exported.');
   for (const pageTitle of ['List widgets', 'Receive Widget Created', 'Check in an FCM client', 'Get lighting state', 'GraphQL API', 'Schema components', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
+  }
+  for (const operation of ['listCatalogItems', 'listAdminWidgets']) {
+    assert(docsIndex.html.includes(operation), `Merged navigation must include ${operation} from every same-folder input.`);
   }
 
   const internalLinks = await assertInternalLinksResolve(pages, outputRoot);

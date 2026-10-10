@@ -60,6 +60,23 @@ Use the action in an existing workflow when deployment is managed separately:
 
 Inputs accept comma-separated paths or globs relative to `source-directory`. If no paths are given for a type, discovery recognizes OpenAPI and AsyncAPI documents by their `openapi` or `asyncapi` version field and includes `.graphql` and `.gql` files. Discovery skips common dependency and build directories. Set `discover: false` to use only explicitly listed files.
 
+AsyncAPI 2 documents are adapted to AsyncAPI 3 only in the generated presentation;
+the source files remain unchanged. Explicit operation IDs are preserved. Otherwise,
+IDs combine `publish_` or `subscribe_` with the channel address, for example
+`publish_v2_connection` for `/v2/{connection}`. Publish maps to application send;
+subscribe maps to application receive. Duplicate IDs fail the build. Security AND,
+anonymous and scoped requirements that cannot be preserved fail explicitly.
+External AsyncAPI 2 channel/operation references also fail explicitly.
+Local non-JSON payload references such as protobuf render their exact source text,
+relative filename and schema format instead of an invented JSON schema. Ordinary
+JSON payloads keep the default schema view.
+
+OpenAPI and AsyncAPI presentation files share a derived local reference graph.
+Actual schema references point to derived copies, preserving recursive schemas.
+Inside vendor extensions, `$ref` becomes `x-documentation-reference` with the
+exact original filename and fragment. This keeps provenance such as protobuf
+enum references available without asking the JSON schema bundler to parse them.
+The canonical contracts and wire values remain unchanged.
 The optional `graphql-bindings` input points to a YAML or JSON manifest inside `source-directory`. It links GraphQL fields that use generic JSON scalars, OpenAPI operations with embedded or generic JSON bodies, and AsyncAPI operations with JSON-in-string schemas to named OpenAPI component schemas. The action generates reference pages from those components and adds links to the GraphQL type and matching operation pages. References are local to the source directory. Example:
 
 Named schemas referenced by OpenAPI or AsyncAPI `contentSchema` declarations are also discovered automatically from the selected input documents. Their component pages render nested fields and alternatives, and matching operation pages link to the discovered schemas even when no binding manifest is supplied.
@@ -109,3 +126,29 @@ docs/guides/
 The optional `meta.json` is the normal Fumadocs folder metadata file. For example, `{ "title": "Device guides", "pages": ["enumerate", "devices/turn-on"] }` controls the section label and order. Guide files use Fumadocs' built-in Markdown/MDX renderer and supported components.
 
 The `output` directory contains the static site and its assets. On GitHub Actions, the base path defaults to the repository name for project Pages sites. Set `base-path` explicitly for a custom path or a different hosting setup.
+
+Some providers send a JSON request entity with a nonstandard Content-Type. Set
+`json-media-types: plain/text` (or a comma-separated list) only when the checked-in
+contract explicitly describes that behavior. The renderer keeps the original
+media type in the reference, playground and generated requests while encoding
+the body as JSON. This input is available on the composite action and reusable
+workflow; other media types retain their default behavior.
+Parameters are supported, for example
+`json-media-types: 'plain/text,text/plain;charset=UTF-8,*/*'`. Keep the exact media
+type spelling from the schema, including parameter values; generated Content-Type
+headers preserve it. Fumadocs dispatches encoders by the normalized base media
+type, so the JSON encoder also applies to other parameter variants of that base
+type in the rendered schemas. Invalid media types and malformed
+parameters fail before the site is generated.
+
+For recursive contracts with nested `allOf`/`oneOf` constraints, set
+`schema-view: references`. The reference renders the canonical conjunctions,
+alternatives, required fields, examples and bounds without multiplying their
+intersections. Named components appear once per body/response, with links to
+their rendered anchors. Request snippets and the playground remain available;
+TypeScript definitions are omitted in this mode. The default `native` view keeps
+the standard Fumadocs tables. Static rendering uses two workers to bound CI load.
+In reference mode, response graphs for every status and media type render in the
+page immediately, including error bodies and nullable alternatives. Response
+examples remain in the examples panel; each schema graph has distinct component
+anchors so references resolve within its status and media type.

@@ -325,6 +325,7 @@ export async function generateSchemaPages({ bindingsPath, sourceDocuments = [], 
 
     for (const [key, item] of Object.entries(value)) {
       if (['$ref', 'contentSchema', 'example', 'examples', 'default', 'enum', 'const', 'x-example-evidence'].includes(key)) continue;
+      if (['payload', 'schema'].includes(key) && value.schemaFormat && !/json|yaml/i.test(value.schemaFormat)) continue;
       await discoverEmbeddedSchemas(item, currentFile, found, visited);
     }
   }

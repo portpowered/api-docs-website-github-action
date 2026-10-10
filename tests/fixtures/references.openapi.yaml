@@ -1,0 +1,79 @@
+openapi: 3.0.3
+info:
+  title: Recursive reference renderer fixture
+  version: 1.0.0
+paths:
+  /records:
+    post:
+      operationId: modifyRecursiveRecord
+      summary: Modify a recursive record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Mutation'}
+            example: {title: synthetic-record, revision: synthetic-revision}
+      responses:
+        '200':
+          description: Acknowledged.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QueryResult'}
+            text/json:
+              schema: {$ref: '#/components/schemas/Progress'}
+        '429':
+          description: Typed provider rate limit.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderError'}
+        default:
+          description: Provider failure.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProviderError'}
+components:
+  schemas:
+    QueryResult:
+      type: object
+      required: [responseCursor]
+      properties:
+        responseCursor: {type: string}
+        records:
+          type: array
+          items:
+            anyOf:
+              - {$ref: '#/components/schemas/Create'}
+              - {$ref: '#/components/schemas/Delete'}
+              - {$ref: '#/components/schemas/ProviderError'}
+    Progress:
+      type: object
+      properties:
+        responseProgress: {type: integer, nullable: true}
+        responseErrorCode:
+          anyOf: [{type: integer}, {type: 'null'}]
+    ProviderError:
+      type: object
+      required: [serverErrorCode]
+      properties:
+        serverErrorCode: {type: string}
+        reason: {type: string, nullable: true}
+    Mutation:
+      allOf:
+        - oneOf:
+            - {$ref: '#/components/schemas/Create'}
+            - {$ref: '#/components/schemas/Delete'}
+        - type: object
+          required: [revision]
+          properties:
+            revision: {type: string}
+    Create:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1}
+        child: {$ref: '#/components/schemas/Mutation'}
+    Delete:
+      type: object
+      required: [deleted]
+      properties:
+        deleted: {type: integer, enum: [1]}

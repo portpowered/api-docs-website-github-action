@@ -36,6 +36,14 @@ inputs:
     description: Directory in which to write the static website.
     required: false
     default: api-docs-out
+  json-media-types:
+    description: Comma-separated additional request media types whose bodies are encoded as JSON. Opt in only when the provider uses JSON with a nonstandard Content-Type.
+    required: false
+    default: ""
+  schema-view:
+    description: Native schema tables, or references to render recursive allOf/oneOf contracts without expanding intersections.
+    required: false
+    default: native
 runs:
   using: composite
   steps:
@@ -60,4 +68,6 @@ runs:
         API_DOCS_GUIDES: ${{ inputs.guides-directory }}
         API_DOCS_BASE_PATH: ${{ inputs.base-path }}
         API_DOCS_OUTPUT: ${{ inputs.output }}
+        API_DOCS_JSON_MEDIA_TYPES: ${{ inputs.json-media-types }}
+        API_DOCS_SCHEMA_VIEW: ${{ inputs.schema-view }}
       run: node "${{ github.action_path }}/scripts/build.mjs"

@@ -5,6 +5,7 @@ import { generateFiles as generateAsyncAPIFiles } from '@fumadocs/asyncapi';
 import { createOpenAPI } from 'fumadocs-openapi/server';
 import { createAsyncAPI } from '@fumadocs/asyncapi/server';
 import { generateGraphQLFiles } from '../../scripts/graphql.mjs';
+import { mergeGeneratedFiles } from '../../scripts/generated-files.mjs';
 import { addAsyncAPIBindingLinks, addOpenAPIBindingLinks, addSchemaPagesToOpenAPIMeta, generateSchemaPages } from '../../scripts/schema-pages.mjs';
 import { inspectBinaryOpenAPIDocuments, writeBinaryOpenAPIFallbacks } from './binary-openapi.mjs';
 import config from '../lib/site-config.json' with { type: 'json' };
@@ -12,17 +13,24 @@ import config from '../lib/site-config.json' with { type: 'json' };
 const contentRoot = path.join(process.cwd(), 'content/docs');
 await mkdir(contentRoot, { recursive: true });
 
-const binaryOpenAPI = await inspectBinaryOpenAPIDocuments(config.schemas.openapi, config.sourceRoot);
+const binaryOpenAPI = await inspectBinaryOpenAPIDocuments(config.sourceSchemas.openapi, config.sourceRoot);
+const presentedBinaryOpenAPI = await inspectBinaryOpenAPIDocuments(config.schemas.openapi, config.sourceRoot);
 const schemaBindings = await generateSchemaPages({
   bindingsPath: config.schemaBindings,
-  sourceDocuments: [...config.schemas.openapi, ...config.schemas.asyncapi],
+  sourceDocuments: [...config.sourceSchemas.openapi, ...config.sourceSchemas.asyncapi],
   sourceRoot: config.sourceRoot,
   contentRoot,
   extraBindings: { openapi: binaryOpenAPI.bindings },
 });
 
-if (Object.keys(binaryOpenAPI.nativeInputs).length) {
-  const openapi = createOpenAPI({ input: binaryOpenAPI.nativeInputs });
+// Component discovery reads source contracts; operation pages use presentation copies.
+const presentationBindings = (kind) => schemaBindings[kind].map((binding) => ({
+  ...binding,
+  document: config.schemas[kind][config.sourceSchemas[kind].indexOf(binding.document)] ?? binding.document,
+}));
+
+if (Object.keys(presentedBinaryOpenAPI.nativeInputs).length) {
+  const openapi = createOpenAPI({ input: presentedBinaryOpenAPI.nativeInputs });
   await generateOpenAPIFiles({
     input: openapi,
     output: path.join(contentRoot, 'openapi'),
@@ -30,7 +38,8 @@ if (Object.keys(binaryOpenAPI.nativeInputs).length) {
     groupBy: 'tag',
     meta: true,
     beforeWrite(files) {
-      addOpenAPIBindingLinks(files, schemaBindings.openapi);
+      mergeGeneratedFiles(files);
+      addOpenAPIBindingLinks(files, presentationBindings('openapi'));
     },
   });
 }
@@ -46,7 +55,8 @@ if (config.schemas.asyncapi.length) {
     groupBy: 'tag',
     meta: true,
     beforeWrite(files) {
-      addAsyncAPIBindingLinks(files, schemaBindings.asyncapi);
+      mergeGeneratedFiles(files);
+      addAsyncAPIBindingLinks(files, presentationBindings('asyncapi'));
     },
   });
 }
