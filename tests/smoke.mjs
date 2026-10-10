@@ -83,8 +83,10 @@ try {
   assert(asyncApi2Page.html.includes('widgetId'), 'Adapted AsyncAPI 2 must render the original JSON payload.');
   for (const [id, message] of [['publish_v2_connection', 'ClientMessage'], ['subscribe_v2_connection', 'ServerMessage']]) {
     const bridge = pageAtRoute(`docs/asyncapi/unknown/${id}/index.html`, message, 'adapted protobuf bridge operation');
-    for (const marker of ['connection', 'application/x-protobuf', 'application/vnd.google.protobuf;version=2', 'bridge.proto', 'connection_request', 'notification']) {
-      assert(bridge.html.includes(marker), `Protobuf operation ${id} must visibly retain ${marker}.`);
+    const visible = bridge.html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+    const direction = id.startsWith('publish_') ? 'SEND' : 'RECEIVE';
+    for (const marker of [direction, 'Source schema:', 'Schema format:', 'connection', 'application/x-protobuf', 'application/vnd.google.protobuf;version=2', 'bridge.proto', 'connection_request', 'notification']) {
+      assert(visible.includes(marker), `Protobuf operation ${id} must visibly retain ${marker} outside serialized page data.`);
     }
   }
 

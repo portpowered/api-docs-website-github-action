@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node tests/presentations.mjs && node tests/asyncapi.mjs && node tests/media-adapters.mjs && node tests/generated-files.mjs && node tests/schema-reference-graph.mjs && npm run test:smoke",
+    "test": "node tests/asyncapi-presentation.mjs && node tests/presentations.mjs && node tests/asyncapi.mjs && node tests/media-adapters.mjs && node tests/generated-files.mjs && node tests/schema-reference-graph.mjs && npm run test:smoke",
     "test:smoke": "node tests/smoke.mjs"
   },
   "dependencies": {

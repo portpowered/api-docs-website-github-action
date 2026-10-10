@@ -1,7 +1,10 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { createOpenAPIPage } from 'fumadocs-openapi/ui';
 import { createAsyncAPIPage } from '@fumadocs/asyncapi/ui';
+import { useOperation } from '@fumadocs/asyncapi/operation';
+import { AsyncAPIPresentation } from './asyncapi-presentation.mjs';
 import { createJSONMediaOptions } from '../lib/media-adapters.mjs';
 import site from '../lib/site-config.json';
 import { ReferenceSchema } from './reference-schema';
@@ -13,7 +16,22 @@ export const OpenAPIPage = createOpenAPIPage({
     generateTypeScriptDefinitions: false,
   } : {}),
 });
+function AsyncOperationLayout({ slots }: { slots: Record<string, ReactNode> }) {
+  const { action, messages } = useOperation();
+  return <AsyncAPIPresentation action={action} messages={messages.map((item) => ({
+    name: item.name,
+    contentType: item.message.contentType,
+    payload: item.payload,
+  }))}>
+    {slots.header}{slots.description}{slots.server}{slots.channel}{slots.authSchemes}
+    {slots.parameters}{slots.messages}{slots.reply}{slots.bindings}
+  </AsyncAPIPresentation>;
+}
+
 export const AsyncAPIPage = createAsyncAPIPage({
+  content: {
+    renderOperationLayout(slots) { return <AsyncOperationLayout slots={slots} />; },
+  },
   schemaUI: {
     render(options, { SchemaUI }) {
       const source = (options.root as { 'x-documentation-source'?: { reference: string; format: string; text: string } })?.['x-documentation-source'];
