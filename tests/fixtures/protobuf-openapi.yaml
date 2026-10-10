@@ -1,0 +1,49 @@
+openapi: 3.0.3
+info:
+  title: Synthetic protobuf fallback fixture
+  version: 1.0.0
+  description: Synthetic contract fixture for the static binary OpenAPI fallback.
+servers:
+  - url: https://android.clients.google.com
+paths:
+  /register:
+    post:
+      operationId: registerFCMClient
+      summary: Register an FCM client
+      tags: [FCM]
+      responses:
+        '200':
+          description: Registration response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registered:
+                    type: boolean
+  /checkin:
+    post:
+      operationId: checkInFCMClient
+      summary: Check in an FCM client
+      tags: [FCM]
+      requestBody:
+        required: true
+        content:
+          application/x-protobuf:
+            schema:
+              $ref: '#/components/schemas/AndroidCheckinRequestWire'
+      responses:
+        '200':
+          description: Check-in response.
+          content:
+            application/x-protobuf:
+              schema:
+                $ref: '#/components/schemas/AndroidCheckinResponseWire'
+components:
+  schemas:
+    AndroidCheckinRequestWire:
+      type: string
+      format: binary
+    AndroidCheckinResponseWire:
+      type: string
+      format: binary

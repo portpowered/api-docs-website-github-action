@@ -9,13 +9,20 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureRoot = join(repoRoot, 'tests', 'fixtures');
 const tempRoot = await mkdtemp(join(tmpdir(), 'api-docs-smoke-'));
 const outputRoot = join(tempRoot, 'site');
+const automaticOutputRoot = join(tempRoot, 'automatic-site');
 const basePath = '/go-ring';
 const actionVersion = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).version;
 const reusableWorkflow = await readFile(join(repoRoot, '.github', 'workflows', 'publish.yml'), 'utf8');
-assert(
-  reusableWorkflow.includes(`uses: portpowered/api-docs-website-github-action@v${actionVersion}`),
-  'Reusable workflow must invoke the composite action at its own release version.',
-);
+assert(reusableWorkflow.includes('repository: portpowered/api-docs-website-github-action'),
+  'Reusable workflow must check out the generator repository explicitly.');
+assert(reusableWorkflow.includes('ref: ${{ inputs.action-ref }}'),
+  'Reusable workflow must allow callers to pin an exact generator ref.');
+assert(reusableWorkflow.includes('uses: ./.api-docs-action'),
+  'Reusable workflow must invoke the checked-out generator source.');
+assert(reusableWorkflow.includes("graphql-bindings: ${{ inputs['graphql-bindings'] }}"),
+  'Reusable workflow must forward schema bindings to the composite action.');
+assert(reusableWorkflow.includes(`default: v${actionVersion}`),
+  'Reusable workflow default action-ref must remain on the current stable release tag.');
 assert(reusableWorkflow.includes('guides-directory: ${{ inputs.guides-directory }}'),
   'Reusable workflow must forward the guides directory.');
 
@@ -29,6 +36,64 @@ async function listFiles(root, directory = root) {
   return files;
 }
 
+function pageRoute(file) {
+  const normalized = file.replaceAll('\\', '/');
+  if (normalized === 'index.html') return `${basePath}/`;
+  if (normalized.endsWith('/index.html')) return `${basePath}/${normalized.slice(0, -'index.html'.length)}`;
+  return `${basePath}/${normalized}`;
+}
+
+function decodeHtml(value) {
+  return value
+    .replaceAll('&amp;', '&')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>');
+}
+
+async function assertInternalLinksResolve(pages, siteRoot) {
+  const checked = [];
+  for (const page of pages) {
+    const baseUrl = new URL(pageRoute(page.file), 'https://site.invalid');
+    for (const match of page.html.matchAll(/<a\b[^>]*\bhref=(?:"([^"]*)"|'([^']*)')/gi)) {
+      const href = decodeHtml(match[1] ?? match[2] ?? '');
+      if (!href || href.startsWith('javascript:')) continue;
+      const targetUrl = new URL(href, baseUrl);
+      if (targetUrl.origin !== baseUrl.origin) continue;
+      const baseUrlPath = `${basePath}/`;
+      assert(
+        targetUrl.pathname === basePath || targetUrl.pathname.startsWith(baseUrlPath),
+        `${page.file}: internal link is outside the Pages base path: ${href}`,
+      );
+
+      const relativeTarget = decodeURIComponent(targetUrl.pathname.slice(basePath.length)).replace(/^\/+/, '');
+      const targetPath = resolve(siteRoot, relativeTarget);
+      assert(
+        targetPath === resolve(siteRoot) || targetPath.startsWith(`${resolve(siteRoot)}${sep}`),
+        `${page.file}: internal link escapes the generated site: ${href}`,
+      );
+      const candidates = targetUrl.pathname.endsWith('/')
+        ? [join(targetPath, 'index.html')]
+        : [targetPath, join(targetPath, 'index.html')];
+      let exists = false;
+      for (const candidate of candidates) {
+        try {
+          if ((await stat(candidate)).isFile()) {
+            exists = true;
+            break;
+          }
+        } catch (error) {
+          if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') throw error;
+        }
+      }
+      assert(exists, `${page.file}: internal link target does not exist: ${href}`);
+      checked.push(href);
+    }
+  }
+  return checked.length;
+}
+
 try {
   const build = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
     cwd: repoRoot,
@@ -38,9 +103,10 @@ try {
       ...process.env,
       API_DOCS_TITLE: 'Smoke Test API Reference',
       API_DOCS_BASE_PATH: basePath,
-      API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml',
+      API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml,protobuf-openapi.yaml,tp-inline-namespaces.yaml',
       API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml,bridge.asyncapi.yaml',
       API_DOCS_GRAPHQL: 'schema.graphql',
+      API_DOCS_GRAPHQL_BINDINGS: 'schema-bindings.yaml',
       API_DOCS_DISCOVER: 'false',
       API_DOCS_SOURCE: fixtureRoot,
       API_DOCS_GUIDES: 'guides',
@@ -76,6 +142,44 @@ try {
   assert.match(openapiPage.html, /GET/i, 'OpenAPI operation page must render the HTTP method.');
   assert(openapiPage.html.includes('/widgets'), 'OpenAPI operation page must render its path.');
   assert(openapiPage.html.includes('Widget'), 'OpenAPI operation page must render its response schema.');
+  assert(openapiPage.html.includes('Related typed widget settings'), 'OpenAPI operation page must link its bound component schema.');
+  assert.match(openapiPage.html, /href="\.\.\/\.\.\/schemas\/openapi\/widgetsettings"/, 'OpenAPI binding link must resolve from the operation page.');
+
+  const protobufPage = pageAtRoute('docs/openapi/fcm/checkInFCMClient/index.html', 'checkInFCMClient', 'binary protobuf operation fallback');
+  assert.match(protobufPage.html, /POST/i, 'Protobuf fallback must show the HTTP method.');
+  assert(protobufPage.html.includes('/checkin'), 'Protobuf fallback must show the request path.');
+  assert(protobufPage.html.includes('https://android.clients.google.com'), 'Protobuf fallback must show the server URL.');
+  assert(protobufPage.html.includes('application/x-protobuf'), 'Protobuf fallback must preserve the media type.');
+  assert(protobufPage.html.includes('format: binary'), 'Protobuf fallback must show the binary wire format.');
+  assert.match(protobufPage.html, /href="[^"]*androidcheckinrequestwire[^"]*">AndroidCheckinRequestWire/, 'Protobuf fallback must link the request wire schema.');
+  assert.match(protobufPage.html, /href="[^"]*androidcheckinresponsewire[^"]*">AndroidCheckinResponseWire/, 'Protobuf fallback must link the 200 response wire schema.');
+  const nativeFcmPage = pageAtRoute('docs/openapi/fcm/registerFCMClient/index.html', 'registerFCMClient', 'native operation retained beside protobuf fallback');
+  assert(nativeFcmPage.html.includes('/register'), 'Native operation must remain in the document after the binary fallback is extracted.');
+  const protobufRequestPage = pageAtRoute('docs/openapi/schemas/protobuf-openapi/androidcheckinrequestwire/index.html', 'AndroidCheckinRequestWire', 'binary protobuf request component');
+  const protobufResponsePage = pageAtRoute('docs/openapi/schemas/protobuf-openapi/androidcheckinresponsewire/index.html', 'AndroidCheckinResponseWire', 'binary protobuf response component');
+  for (const page of [protobufRequestPage, protobufResponsePage]) {
+    assert(page.html.includes('string'), 'Protobuf wire schema must retain its string type.');
+    assert(page.html.includes('binary'), 'Protobuf wire schema must retain its binary format.');
+  }
+
+  const componentPage = pageAtRoute('docs/openapi/schemas/openapi/widgetsettings/index.html', 'WidgetSettings', 'bound OpenAPI component schema');
+  assert(componentPage.html.includes('mode'), 'Component schema page must render the typed field.');
+  assert(componentPage.html.includes('draft'), 'Component schema page must render the source example.');
+  const schemaIndexPage = pageAtRoute('docs/openapi/schemas/index.html', 'Schema components', 'schema component index');
+  assert.match(schemaIndexPage.html, /href="openapi\/widgetsettings"/, 'Schema index links must resolve to generated components.');
+
+  const sysInfoPage = pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/systemgetsysinfocommand/index.html', 'SystemGetSysInfoCommand', 'nested system namespace component');
+  assert(sysInfoPage.html.includes('system.get_sysinfo'), 'System namespace page must show the recursive field path.');
+  assert(sysInfoPage.html.includes('Yes'), 'System namespace page must show required nested fields.');
+  assert(sysInfoPage.html.includes('string'), 'System namespace page must preserve the nested field type.');
+  assert(sysInfoPage.html.includes('&quot;&quot;') || sysInfoPage.html.includes('""'), 'System namespace page must render the empty-string enum value.');
+  const lightingPage = pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/lightingcommandresult/index.html', 'LightingCommandResult', 'nested lighting namespace component');
+  assert(lightingPage.html.includes('smartlife.iot.smartbulb.lightingservice.get_light_state'), 'Lighting page must render the nested get_light_state row.');
+  assert(lightingPage.html.includes('smartlife.iot.smartbulb.lightingservice.transition_light_state'), 'Lighting page must render the nested transition_light_state row.');
+  assert.match(lightingPage.html, /href="[^"]*lightstate[^"]*">LightState/, 'Lighting page must link its named LightState component.');
+  assert.match(lightingPage.html, /href="[^"]*commandacknowledgement[^"]*">CommandAcknowledgement/, 'Lighting page must link its named CommandAcknowledgement component.');
+  pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/lightstate/index.html', 'LightState', 'named LightState component');
+  pageAtRoute('docs/openapi/schemas/tp-inline-namespaces/commandacknowledgement/index.html', 'CommandAcknowledgement', 'named CommandAcknowledgement component');
 
   const asyncApiPage = pageAtRoute('docs/asyncapi/unknown/receiveWidgetCreated/index.html', 'WidgetCreated', 'native AsyncAPI operation');
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
@@ -89,6 +193,29 @@ try {
       assert(visible.includes(marker), `Protobuf operation ${id} must visibly retain ${marker} outside serialized page data.`);
     }
   }
+  assert(asyncApiPage.html.includes('Embedded widget event JSON'), 'AsyncAPI operation page must link its embedded JSON component.');
+  assert(asyncApiPage.html.includes('Widget event data schema'), 'AsyncAPI operation page must expose the bound JSON-in-string schema.');
+  assert.match(asyncApiPage.html, /href="\.\.\/\.\.\/\.\.\/openapi\/schemas\/embedded-schemas\/widgeteventdata"/, 'AsyncAPI schema link must resolve from the operation page.');
+
+  const embeddedComponentPage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgeteventdata/index.html', 'WidgetEventData', 'embedded JSON component schema');
+  assert(embeddedComponentPage.html.includes('requestData'), 'Embedded component page must render request data fields.');
+  assert(embeddedComponentPage.html.includes('responseData'), 'Embedded component page must render response data fields.');
+  assert(embeddedComponentPage.html.includes('synthetic-relay-state'), 'Embedded component page must render its visibly synthetic nested example.');
+  assert.match(embeddedComponentPage.html, /href="\.\.\/widgetrequestdata"/, 'Embedded fields must link to their named variants.');
+  assert.match(embeddedComponentPage.html, /href="\.\.\/widgetresponsedata"/, 'Embedded fields must link to their named variants.');
+
+  const embeddedRequestPage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgetrequestdata/index.html', 'RelayStateRequest', 'request-data variants');
+  assert(embeddedRequestPage.html.includes('Variants'), 'Request-data page must show its schema alternatives.');
+  assert(embeddedRequestPage.html.includes('SyntheticRequest'), 'Request-data page must list the synthetic alternative.');
+  const relayStatePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/relaystaterequest/index.html', 'relay_state', 'nested relay state request fields');
+  assert(relayStatePage.html.includes('relay_state'), 'Relay-state schema page must render its nested field.');
+
+  const embeddedResponsePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/widgetresponsedata/index.html', 'ResultResponse', 'response-data variants');
+  assert(embeddedResponsePage.html.includes('Variants'), 'Response-data page must show its schema alternatives.');
+  const resultResponsePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/resultresponse/index.html', 'result', 'nested result response');
+  assert(resultResponsePage.html.includes('ResultValue'), 'Result response must link its nested result value schema.');
+  const resultValuePage = pageAtRoute('docs/openapi/schemas/embedded-schemas/resultvalue/index.html', 'value', 'nested result value field');
+  assert(resultValuePage.html.includes('value'), 'Result schema must render its nested value field.');
 
   const catalogPage = pageAtRoute('docs/openapi/unknown/listCatalogItems/index.html', 'listCatalogItems', 'Catalog OpenAPI operation');
   const legacyJSON = pageAtRoute('docs/openapi/widgets/registerLegacyWidget/index.html', 'plain/text', 'nonstandard JSON media operation');
@@ -103,17 +230,65 @@ try {
 
   const graphqlPage = pageAtRoute('docs/graphql/operations/query/widget/index.html', 'Operation: query', 'GraphQL query');
   assert(graphqlPage.html.includes('Type: ID!'), 'GraphQL operation page must render its argument type.');
+  const graphqlInputPage = pageAtRoute('docs/graphql/types/widgetinput/index.html', 'Typed JSON schema references', 'GraphQL scalar binding');
+  assert(graphqlInputPage.html.includes('WidgetSettings'), 'GraphQL type page must link the bound OpenAPI component.');
+  assert.match(graphqlInputPage.html, /href="\.\.\/\.\.\/\.\.\/openapi\/schemas\/openapi\/widgetsettings"/, 'GraphQL type page link must resolve to the generated component.');
   const guidePage = pageAtRoute('docs/guides/enumerate-devices/index.html', 'Find the devices available to a cloud account.', 'native Fumadocs guide');
   assert(guidePage.html.includes('List all devices available to the account.'), 'Guide page must render its authored Markdown body.');
 
   const docsIndex = pages.find(({ file }) => file === join('docs', 'index.html'));
   assert(docsIndex, 'Fumadocs docs landing page must be exported.');
-  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'GraphQL API', 'Device guides', 'Enumerate devices']) {
+  for (const pageTitle of ['List widgets', 'Receive Widget Created', 'Check in an FCM client', 'Get lighting state', 'GraphQL API', 'Schema components', 'Device guides', 'Enumerate devices']) {
     assert(docsIndex.html.includes(pageTitle), `Docs navigation must include ${pageTitle}.`);
   }
   for (const operation of ['listCatalogItems', 'listAdminWidgets']) {
     assert(docsIndex.html.includes(operation), `Merged navigation must include ${operation} from every same-folder input.`);
   }
+
+  const internalLinks = await assertInternalLinksResolve(pages, outputRoot);
+  assert(internalLinks > 0, 'Smoke test must validate rendered internal links.');
+
+  const automaticBuild = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    timeout: 180_000,
+    env: {
+      ...process.env,
+      API_DOCS_TITLE: 'Automatic JSON schema fixture',
+      API_DOCS_BASE_PATH: basePath,
+      API_DOCS_OPENAPI: 'automatic-content-schema.yaml',
+      API_DOCS_ASYNCAPI: '',
+      API_DOCS_GRAPHQL: '',
+      API_DOCS_GRAPHQL_BINDINGS: '',
+      API_DOCS_DISCOVER: 'false',
+      API_DOCS_SOURCE: fixtureRoot,
+      API_DOCS_GUIDES: '',
+      API_DOCS_OUTPUT: automaticOutputRoot,
+    },
+  });
+  assert.equal(automaticBuild.status, 0, `Automatic contentSchema build failed.\n${automaticBuild.stdout}\n${automaticBuild.stderr}`);
+
+  const automaticFiles = await listFiles(automaticOutputRoot);
+  const automaticPages = await Promise.all(automaticFiles.filter((file) => file.endsWith('.html')).map(async (file) => ({
+    file,
+    html: await readFile(join(automaticOutputRoot, file), 'utf8'),
+  })));
+  const automaticOperation = automaticPages.find(({ file, html }) => file.endsWith(join('sendCloudRequest', 'index.html')) && html.includes('Embedded JSON schemas'));
+  assert(automaticOperation, 'contentSchema references must create links from the operation without a binding manifest.');
+  assert(automaticOperation.html.includes('RequestData'), 'Operation must link the embedded request variants.');
+  assert(automaticOperation.html.includes('ResponseData'), 'Operation must link the embedded response variants.');
+  const automaticRequest = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'requestdata', 'index.html')));
+  assert(automaticRequest?.html.includes('Variants'), 'Automatically discovered request schema must render its variants.');
+  assert(automaticRequest.html.includes('RelayStateRequest'), 'Automatically discovered request schema must link the relay-state command.');
+  const automaticRelayState = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'relaystaterequest', 'index.html')));
+  assert(automaticRelayState?.html.includes('relay_state'), 'Automatically discovered command schema must render nested relay_state.');
+  const automaticResponse = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'responsedata', 'index.html')));
+  assert(automaticResponse?.html.includes('Variants'), 'Automatically discovered response schema must render its variants.');
+  assert(automaticResponse.html.includes('ResultResponse'), 'Automatically discovered response schema must link the result variant.');
+  const automaticResult = automaticPages.find(({ file }) => file.endsWith(join('automatic-content-schema', 'resultvalue', 'index.html')));
+  assert(automaticResult?.html.includes('value'), 'Automatically discovered result schema must render its nested value.');
+  const automaticInternalLinks = await assertInternalLinksResolve(automaticPages, automaticOutputRoot);
+  assert(automaticInternalLinks > 0, 'Automatic contentSchema build must validate all internal links.');
 
   for (const [guides, expectedMessage] of [
     ['missing-guides', 'Guides directory does not exist: missing-guides'],
@@ -150,38 +325,7 @@ try {
     await stat(assetPath);
   }
 
-  console.log(`Smoke test passed: ${htmlFiles.length} Fumadocs HTML pages and ${assetReferences.length} base-path assets generated.`);
-  const invalidMedia = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
-    cwd: repoRoot, encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, API_DOCS_JSON_MEDIA_TYPES: 'plain/text; charset=' },
-  });
-  assert.notEqual(invalidMedia.status, 0, 'Configured media aliases must have valid parameters.');
-  assert(`${invalidMedia.stdout}\n${invalidMedia.stderr}`.includes('Invalid JSON media type'),
-    'Invalid aliases must fail before generating the site.');
-  const referenceOutput = join(tempRoot, 'reference-site');
-  const referenceBuild = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
-    cwd: repoRoot, encoding: 'utf8', timeout: 180_000,
-    env: {
-      ...process.env, API_DOCS_SOURCE: fixtureRoot, API_DOCS_OPENAPI: 'references.openapi.yaml',
-      API_DOCS_ASYNCAPI: '', API_DOCS_GRAPHQL: '', API_DOCS_DISCOVER: 'false',
-      API_DOCS_SCHEMA_VIEW: 'references', API_DOCS_OUTPUT: referenceOutput, API_DOCS_BASE_PATH: basePath,
-    },
-  });
-  assert.equal(referenceBuild.status, 0, `Reference graph export failed.\n${referenceBuild.stdout}\n${referenceBuild.stderr}`);
-  const graphHTML = await readFile(join(referenceOutput, 'docs/openapi/unknown/modifyRecursiveRecord/index.html'), 'utf8');
-  for (const field of ['revision', 'title', 'deleted', 'oneOf', 'allOf', 'Yes']) {
-    assert(graphHTML.includes(field), `Reference graph must render canonical variant/required field ${field}.`);
-  }
-  assert(graphHTML.includes('synthetic-record'), 'The generated request snippet must keep the schema example.');
-  assert(graphHTML.includes('-component-'), 'Named components must have rendered anchor destinations.');
-  const visibleGraph = graphHTML.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
-  const responseStart = visibleGraph.indexOf('aria-label="Response Body"');
-  assert(responseStart !== -1, 'Response graphs must render outside collapsed accordions.');
-  const responseHTML = visibleGraph.slice(responseStart, visibleGraph.indexOf('@4xl:sticky', responseStart));
-  for (const marker of ['Field or alternative', 'Required', 'Contract', 'responseCursor', 'responseProgress', 'responseErrorCode',
-    'serverErrorCode', 'anyOf[0]', 'anyOf[1]', 'anyOf[2]', 'null', 'Yes', '429', 'default', 'text/json', 'application/problem+json']) {
-    assert(responseHTML.includes(marker), `Visible response graphs must include ${marker} independently of request tables and serialized schema data.`);
-  }
+  console.log(`Smoke test passed: ${htmlFiles.length} Fumadocs HTML pages, ${internalLinks} internal links, ${automaticPages.length} automatic-schema pages, ${automaticInternalLinks} automatic-schema internal links, and ${assetReferences.length} base-path assets generated.`);
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }

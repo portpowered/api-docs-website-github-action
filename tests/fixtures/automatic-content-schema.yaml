@@ -1,0 +1,109 @@
+openapi: 3.1.0
+info:
+  title: Automatic JSON schema discovery fixture
+  version: 1.0.0
+paths:
+  /cloud/request:
+    post:
+      operationId: sendCloudRequest
+      tags: [automatic]
+      summary: Send a request with JSON encoded data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloudRequest'
+      responses:
+        '200':
+          description: The request result as JSON encoded data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloudResponse'
+components:
+  schemas:
+    CloudRequest:
+      type: object
+      properties:
+        requestData:
+          type: string
+          contentMediaType: application/json
+          contentSchema:
+            $ref: '#/components/schemas/RequestData'
+          example: '{"relay_state":"synthetic-relay-state"}'
+          x-example-evidence: synthetic
+    RequestData:
+      oneOf:
+        - $ref: '#/components/schemas/RelayStateRequest'
+        - $ref: '#/components/schemas/OpenRequest'
+      example:
+        relay_state: synthetic-relay-state
+      x-example-evidence: synthetic
+    RelayStateRequest:
+      type: object
+      required: [relay_state]
+      properties:
+        relay_state:
+          type: string
+          example: synthetic-relay-state
+          x-example-evidence: synthetic
+      example:
+        relay_state: synthetic-relay-state
+      x-example-evidence: synthetic
+    OpenRequest:
+      type: object
+      additionalProperties: true
+      example:
+        caller_defined: synthetic-value
+      x-example-evidence: synthetic
+    CloudResponse:
+      type: object
+      properties:
+        responseData:
+          type: string
+          contentMediaType: application/json
+          contentSchema:
+            $ref: '#/components/schemas/ResponseData'
+          example: '{"result":{"value":"synthetic-result"}}'
+          x-example-evidence: synthetic
+    ResponseData:
+      oneOf:
+        - $ref: '#/components/schemas/ResultResponse'
+        - $ref: '#/components/schemas/ErrorResponse'
+      example:
+        result:
+          value: synthetic-result
+      x-example-evidence: synthetic
+    ResultResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          $ref: '#/components/schemas/ResultValue'
+      example:
+        result:
+          value: synthetic-result
+      x-example-evidence: synthetic
+    ResultValue:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          example: synthetic-result
+          x-example-evidence: synthetic
+      example:
+        value: synthetic-result
+      x-example-evidence: synthetic
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: synthetic-error
+          x-example-evidence: synthetic
+      example:
+        error: synthetic-error
+      x-example-evidence: synthetic

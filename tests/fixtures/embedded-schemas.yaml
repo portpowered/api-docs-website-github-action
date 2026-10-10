@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: Synthetic embedded event schemas
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    WidgetEventData:
+      type: object
+      required: [entityId, requestData, responseData]
+      properties:
+        entityId:
+          type: string
+        requestData:
+          $ref: '#/components/schemas/WidgetRequestData'
+        responseData:
+          $ref: '#/components/schemas/WidgetResponseData'
+      example:
+        entityId: synthetic-widget-17
+        requestData:
+          relay_state: synthetic-relay-state
+        responseData:
+          result:
+            value: synthetic-result
+      x-example-evidence: synthetic
+    WidgetRequestData:
+      oneOf:
+        - $ref: '#/components/schemas/RelayStateRequest'
+        - $ref: '#/components/schemas/SyntheticRequest'
+    RelayStateRequest:
+      type: object
+      required: [relay_state]
+      properties:
+        relay_state:
+          type: string
+    SyntheticRequest:
+      type: object
+      required: [syntheticRequestId]
+      properties:
+        syntheticRequestId:
+          type: string
+    WidgetResponseData:
+      oneOf:
+        - $ref: '#/components/schemas/ResultResponse'
+        - $ref: '#/components/schemas/ErrorResponse'
+    ResultResponse:
+      type: object
+      required: [result]
+      properties:
+        result:
+          $ref: '#/components/schemas/ResultValue'
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    ResultValue:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string

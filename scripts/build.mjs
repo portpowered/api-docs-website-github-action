@@ -105,10 +105,35 @@ async function resolveGuidesDirectory() {
   return guidesRealPath;
 }
 
+async function resolveGraphQLBindingsPath() {
+  const configured = process.env.API_DOCS_GRAPHQL_BINDINGS?.trim();
+  if (!configured) return undefined;
+  if (path.isAbsolute(configured) || path.win32.isAbsolute(configured)) {
+    throw new Error('graphql-bindings must be a relative file path inside source-directory.');
+  }
+
+  const sourceRealPath = await realpath(sourceRoot);
+  const bindingPath = path.resolve(sourceRoot, configured);
+  assertWithin(sourceRoot, bindingPath, 'graphql-bindings');
+  let bindingRealPath;
+  try {
+    bindingRealPath = await realpath(bindingPath);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      throw new Error(`GraphQL bindings file does not exist: ${configured}`);
+    }
+    throw error;
+  }
+  assertWithin(sourceRealPath, bindingRealPath, 'graphql-bindings');
+  if (!(await stat(bindingRealPath)).isFile()) throw new Error(`GraphQL bindings path is not a file: ${configured}`);
+  return bindingRealPath;
+}
+
 const openApiFiles = await matches(patterns('OPENAPI'), ['yaml', 'yml', 'json']);
 const asyncApiFiles = await matches(patterns('ASYNCAPI'), ['yaml', 'yml', 'json']);
 const graphqlFiles = await matches(patterns('GRAPHQL'), ['graphql', 'gql']);
 const guidesSource = await resolveGuidesDirectory();
+const graphqlBindingsPath = await resolveGraphQLBindingsPath();
 const schemas = { openapi: [], asyncapi: [], graphql: [] };
 const seen = new Set();
 
@@ -153,6 +178,7 @@ if (!sourceFromOutput || (!sourceFromOutput.startsWith(`..${path.sep}`) && sourc
 await rm(buildRoot, { recursive: true, force: true });
 await mkdir(path.join(buildRoot, 'content', 'docs'), { recursive: true });
 await cp(path.join(actionRoot, 'template'), buildRoot, { recursive: true });
+const sourceSchemas = structuredClone(schemas);
 Object.assign(schemas, await writeSchemaPresentations(schemas, path.join(buildRoot, 'schemas')));
 if (guidesSource) await cp(guidesSource, path.join(buildRoot, 'content', 'docs', 'guides'), { recursive: true });
 await rm(outputRoot, { recursive: true, force: true });
@@ -160,7 +186,16 @@ await mkdir(outputRoot, { recursive: true });
 
 const githubRepo = process.env.GITHUB_REPOSITORY?.split('/')[1];
 const resolvedBasePath = basePath || (githubRepo && !githubRepo.endsWith('.github.io') ? `/${githubRepo}` : '');
-const buildConfig = { title, basePath: resolvedBasePath, schemas, jsonMediaTypes, schemaView };
+const buildConfig = {
+  title,
+  basePath: resolvedBasePath,
+  sourceRoot: sourceRoot.replaceAll('\\', '/'),
+  schemaBindings: graphqlBindingsPath?.replaceAll('\\', '/'),
+  schemas,
+  sourceSchemas,
+  jsonMediaTypes,
+  schemaView,
+};
 await writeFile(path.join(buildRoot, 'lib', 'site-config.json'), JSON.stringify(buildConfig, null, 2));
 
 const { spawnSync } = await import('node:child_process');

@@ -33,3 +33,8 @@ components:
             type: string
           revision:
             type: integer
+          eventJson:
+            type: string
+            contentMediaType: application/json
+            contentSchema:
+              $ref: ./embedded-schemas.yaml#/components/schemas/WidgetEventData
