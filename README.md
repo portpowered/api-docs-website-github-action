@@ -68,6 +68,13 @@ Local non-JSON payload references such as protobuf render their exact source tex
 relative filename and schema format instead of an invented JSON schema. Ordinary
 JSON payloads keep the default schema view.
 
+OpenAPI and AsyncAPI presentation files share a derived local reference graph.
+Actual schema references point to derived copies, preserving recursive schemas.
+Inside vendor extensions, `$ref` becomes `x-documentation-reference` with the
+exact original filename and fragment. This keeps provenance such as protobuf
+enum references available without asking the JSON schema bundler to parse them.
+The canonical contracts and wire values remain unchanged.
+
 Use the optional `guides-directory` input to add Markdown or MDX guides alongside the generated API reference. The path is relative to `source-directory` and must point to a directory inside it. Its contents are copied to the Fumadocs `Guides` section at `/docs/guides`; nested pages, static assets, and an optional Fumadocs `meta.json` are preserved. For example:
 
 ```text

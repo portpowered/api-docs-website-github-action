@@ -115,7 +115,7 @@ export function adaptAsyncAPI(document) {
 }
 
 /** Keep non-JSON payloads as exact source documents, never invented JSON schemas. */
-export async function prepareAsyncAPI(document, sourceFile) {
+export async function prepareAsyncAPI(document, sourceFile, { rebaseReferences = true } = {}) {
   const result = adaptAsyncAPI(document);
   const visit = async (value) => {
     if (!value || typeof value !== 'object') return;
@@ -128,7 +128,7 @@ export async function prepareAsyncAPI(document, sourceFile) {
       return;
     }
     for (const [key, child] of Object.entries(value)) {
-      if (key === '$ref' && typeof child === 'string' && !child.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(child)) {
+      if (rebaseReferences && key === '$ref' && typeof child === 'string' && !child.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(child)) {
         const [file, fragment] = child.split('#');
         value[key] = `${path.resolve(path.dirname(sourceFile), file).replaceAll('\\', '/')}${fragment === undefined ? '' : `#${fragment}`}`;
       } else await visit(child);
