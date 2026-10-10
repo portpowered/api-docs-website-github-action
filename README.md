@@ -57,6 +57,17 @@ Use the action in an existing workflow when deployment is managed separately:
 
 Inputs accept comma-separated paths or globs relative to `source-directory`. If no paths are given for a type, discovery recognizes OpenAPI and AsyncAPI documents by their `openapi` or `asyncapi` version field and includes `.graphql` and `.gql` files. Discovery skips common dependency and build directories. Set `discover: false` to use only explicitly listed files.
 
+AsyncAPI 2 documents are adapted to AsyncAPI 3 only in the generated presentation;
+the source files remain unchanged. Explicit operation IDs are preserved. Otherwise,
+IDs combine `publish_` or `subscribe_` with the channel address, for example
+`publish_v2_connection` for `/v2/{connection}`. Publish maps to application send;
+subscribe maps to application receive. Duplicate IDs fail the build. Security AND,
+anonymous and scoped requirements that cannot be preserved fail explicitly.
+External AsyncAPI 2 channel/operation references also fail explicitly.
+Local non-JSON payload references such as protobuf render their exact source text,
+relative filename and schema format instead of an invented JSON schema. Ordinary
+JSON payloads keep the default schema view.
+
 Use the optional `guides-directory` input to add Markdown or MDX guides alongside the generated API reference. The path is relative to `source-directory` and must point to a directory inside it. Its contents are copied to the Fumadocs `Guides` section at `/docs/guides`; nested pages, static assets, and an optional Fumadocs `meta.json` are preserved. For example:
 
 ```text

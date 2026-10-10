@@ -39,7 +39,7 @@ try {
       API_DOCS_TITLE: 'Smoke Test API Reference',
       API_DOCS_BASE_PATH: basePath,
       API_DOCS_OPENAPI: 'openapi.yaml,service-a/openapi.yaml,service-b/openapi.yaml',
-      API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml',
+      API_DOCS_ASYNCAPI: 'asyncapi.yaml,asyncapi3.yaml,bridge.asyncapi.yaml',
       API_DOCS_GRAPHQL: 'schema.graphql',
       API_DOCS_DISCOVER: 'false',
       API_DOCS_SOURCE: fixtureRoot,
@@ -79,6 +79,14 @@ try {
 
   const asyncApiPage = pageAtRoute('docs/asyncapi/unknown/receiveWidgetCreated/index.html', 'WidgetCreated', 'native AsyncAPI operation');
   assert(asyncApiPage.html.includes('widgetId'), 'AsyncAPI operation page must render its message schema.');
+  const asyncApi2Page = pageAtRoute('docs/asyncapi/unknown/publishWidgetCreated/index.html', 'WidgetCreated', 'adapted AsyncAPI 2 operation');
+  assert(asyncApi2Page.html.includes('widgetId'), 'Adapted AsyncAPI 2 must render the original JSON payload.');
+  for (const [id, message] of [['publish_v2_connection', 'ClientMessage'], ['subscribe_v2_connection', 'ServerMessage']]) {
+    const bridge = pageAtRoute(`docs/asyncapi/unknown/${id}/index.html`, message, 'adapted protobuf bridge operation');
+    for (const marker of ['connection', 'application/x-protobuf', 'application/vnd.google.protobuf;version=2', 'bridge.proto', 'connection_request', 'notification']) {
+      assert(bridge.html.includes(marker), `Protobuf operation ${id} must visibly retain ${marker}.`);
+    }
+  }
 
   const catalogPage = pageAtRoute('docs/openapi/unknown/listCatalogItems/index.html', 'listCatalogItems', 'Catalog OpenAPI operation');
   const legacyJSON = pageAtRoute('docs/openapi/widgets/registerLegacyWidget/index.html', 'plain/text', 'nonstandard JSON media operation');

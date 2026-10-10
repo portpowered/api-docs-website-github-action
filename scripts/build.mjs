@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
 import { parse as parseYaml } from 'yaml';
 import { parse as parseGraphQL, Kind } from 'graphql';
+import { writeAsyncAPIPresentations } from './asyncapi.mjs';
 
 const actionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = path.resolve(process.env.API_DOCS_SOURCE || '.');
@@ -155,6 +156,7 @@ if (!sourceFromOutput || (!sourceFromOutput.startsWith(`..${path.sep}`) && sourc
 await rm(buildRoot, { recursive: true, force: true });
 await mkdir(path.join(buildRoot, 'content', 'docs'), { recursive: true });
 await cp(path.join(actionRoot, 'template'), buildRoot, { recursive: true });
+schemas.asyncapi = await writeAsyncAPIPresentations(schemas.asyncapi, path.join(buildRoot, 'schemas', 'asyncapi'));
 if (guidesSource) await cp(guidesSource, path.join(buildRoot, 'content', 'docs', 'guides'), { recursive: true });
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
