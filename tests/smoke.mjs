@@ -174,6 +174,14 @@ try {
   }
   assert(graphHTML.includes('synthetic-record'), 'The generated request snippet must keep the schema example.');
   assert(graphHTML.includes('-component-'), 'Named components must have rendered anchor destinations.');
+  const visibleGraph = graphHTML.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+  const responseStart = visibleGraph.indexOf('aria-label="Response Body"');
+  assert(responseStart !== -1, 'Response graphs must render outside collapsed accordions.');
+  const responseHTML = visibleGraph.slice(responseStart, visibleGraph.indexOf('@4xl:sticky', responseStart));
+  for (const marker of ['Field or alternative', 'Required', 'Contract', 'responseCursor', 'responseProgress', 'responseErrorCode',
+    'serverErrorCode', 'anyOf[0]', 'anyOf[1]', 'anyOf[2]', 'null', 'Yes', '429', 'default', 'text/json', 'application/problem+json']) {
+    assert(responseHTML.includes(marker), `Visible response graphs must include ${marker} independently of request tables and serialized schema data.`);
+  }
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }

@@ -110,3 +110,7 @@ intersections. Named components appear once per body/response, with links to
 their rendered anchors. Request snippets and the playground remain available;
 TypeScript definitions are omitted in this mode. The default `native` view keeps
 the standard Fumadocs tables. Static rendering uses two workers to bound CI load.
+In reference mode, response graphs for every status and media type render in the
+page immediately, including error bodies and nullable alternatives. Response
+examples remain in the examples panel; each schema graph has distinct component
+anchors so references resolve within its status and media type.

@@ -18,9 +18,45 @@ paths:
           description: Acknowledged.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/Mutation'}
+              schema: {$ref: '#/components/schemas/QueryResult'}
+            text/json:
+              schema: {$ref: '#/components/schemas/Progress'}
+        '429':
+          description: Typed provider rate limit.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderError'}
+        default:
+          description: Provider failure.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProviderError'}
 components:
   schemas:
+    QueryResult:
+      type: object
+      required: [responseCursor]
+      properties:
+        responseCursor: {type: string}
+        records:
+          type: array
+          items:
+            anyOf:
+              - {$ref: '#/components/schemas/Create'}
+              - {$ref: '#/components/schemas/Delete'}
+              - {$ref: '#/components/schemas/ProviderError'}
+    Progress:
+      type: object
+      properties:
+        responseProgress: {type: integer, nullable: true}
+        responseErrorCode:
+          anyOf: [{type: integer}, {type: 'null'}]
+    ProviderError:
+      type: object
+      required: [serverErrorCode]
+      properties:
+        serverErrorCode: {type: string}
+        reason: {type: string, nullable: true}
     Mutation:
       allOf:
         - oneOf:
