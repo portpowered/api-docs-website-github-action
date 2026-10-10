@@ -6,6 +6,7 @@ import fg from 'fast-glob';
 import { parse as parseYaml } from 'yaml';
 import { parse as parseGraphQL, Kind } from 'graphql';
 import { writeSchemaPresentations } from './presentations.mjs';
+import { parseJSONMediaTypes } from './json-media-types.mjs';
 
 const actionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = path.resolve(process.env.API_DOCS_SOURCE || '.');
@@ -15,13 +16,9 @@ const title = process.env.API_DOCS_TITLE?.trim() || 'API Documentation';
 const basePath = (process.env.API_DOCS_BASE_PATH || '').trim().replace(/\/$/, '');
 const discover = (process.env.API_DOCS_DISCOVER || 'true').toLowerCase() !== 'false';
 const guidesDirectory = process.env.API_DOCS_GUIDES?.trim();
-const jsonMediaTypes = (process.env.API_DOCS_JSON_MEDIA_TYPES || '').split(',').map((value) => value.trim()).filter(Boolean);
+const jsonMediaTypes = parseJSONMediaTypes(process.env.API_DOCS_JSON_MEDIA_TYPES);
 const schemaView = process.env.API_DOCS_SCHEMA_VIEW || 'native';
 if (!['native', 'references'].includes(schemaView)) throw new Error(`Invalid schema view: ${schemaView}`);
-const mediaTypePattern = /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
-for (const mediaType of jsonMediaTypes) {
-  if (mediaType !== '*/*' && !mediaTypePattern.test(mediaType)) throw new Error(`Invalid JSON media type: ${mediaType}`);
-}
 
 function patterns(name) {
   return (process.env[`API_DOCS_${name}`] || '').split(',').map((item) => item.trim()).filter(Boolean);

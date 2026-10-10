@@ -27,6 +27,23 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Widget'}
   /widgets:
+    post:
+      operationId: logoutWidgetSession
+      summary: End a session with parameterized JSON media
+      tags: [Widgets]
+      requestBody:
+        required: true
+        content:
+          text/plain;charset=UTF-8:
+            schema:
+              type: object
+              required: [session]
+              properties:
+                session: {type: string}
+            example: {session: synthetic-session}
+      responses:
+        '200':
+          description: Session ended.
     get:
       operationId: listWidgets
       summary: List widgets

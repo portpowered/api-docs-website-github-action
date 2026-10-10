@@ -45,7 +45,7 @@ try {
       API_DOCS_SOURCE: fixtureRoot,
       API_DOCS_GUIDES: 'guides',
       API_DOCS_OUTPUT: outputRoot,
-      API_DOCS_JSON_MEDIA_TYPES: 'plain/text',
+      API_DOCS_JSON_MEDIA_TYPES: 'plain/text,text/plain;charset=UTF-8',
     },
   });
 
@@ -94,6 +94,10 @@ try {
   const legacyJSON = pageAtRoute('docs/openapi/widgets/registerLegacyWidget/index.html', 'plain/text', 'nonstandard JSON media operation');
   assert(legacyJSON.html.includes('legacy-widget'), 'Legacy JSON operation must render the request example.');
   assert(legacyJSON.html.includes('Content-Type'), 'Legacy JSON operation must render its actual request header.');
+  const parameterizedJSON = pageAtRoute('docs/openapi/widgets/logoutWidgetSession/index.html',
+    'text/plain;charset=UTF-8', 'parameterized JSON media operation');
+  assert(parameterizedJSON.html.includes('synthetic-session'), 'Parameterized JSON must render the request example.');
+  assert(parameterizedJSON.html.includes('Content-Type'), 'Parameterized JSON must render its request header.');
   const adminPage = pageAtRoute('docs/openapi/unknown/listAdminWidgets/index.html', 'listAdminWidgets', 'Admin OpenAPI operation');
   assert.notEqual(catalogPage.file, adminPage.file, 'Same-basename OpenAPI inputs must produce distinct routes.');
 
@@ -149,9 +153,9 @@ try {
   console.log(`Smoke test passed: ${htmlFiles.length} Fumadocs HTML pages and ${assetReferences.length} base-path assets generated.`);
   const invalidMedia = spawnSync(process.execPath, [join(repoRoot, 'scripts', 'build.mjs')], {
     cwd: repoRoot, encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, API_DOCS_JSON_MEDIA_TYPES: 'plain/text; charset=utf-8' },
+    env: { ...process.env, API_DOCS_JSON_MEDIA_TYPES: 'plain/text; charset=' },
   });
-  assert.notEqual(invalidMedia.status, 0, 'Configured media aliases must be bare media types.');
+  assert.notEqual(invalidMedia.status, 0, 'Configured media aliases must have valid parameters.');
   assert(`${invalidMedia.stdout}\n${invalidMedia.stderr}`.includes('Invalid JSON media type'),
     'Invalid aliases must fail before generating the site.');
   const referenceOutput = join(tempRoot, 'reference-site');

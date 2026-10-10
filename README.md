@@ -95,6 +95,13 @@ contract explicitly describes that behavior. The renderer keeps the original
 media type in the reference, playground and generated requests while encoding
 the body as JSON. This input is available on the composite action and reusable
 workflow; other media types retain their default behavior.
+Parameters are supported, for example
+`json-media-types: 'plain/text,text/plain;charset=UTF-8,*/*'`. Keep the exact media
+type spelling from the schema, including parameter values; generated Content-Type
+headers preserve it. Fumadocs dispatches encoders by the normalized base media
+type, so the JSON encoder also applies to other parameter variants of that base
+type in the rendered schemas. Invalid media types and malformed
+parameters fail before the site is generated.
 
 For recursive contracts with nested `allOf`/`oneOf` constraints, set
 `schema-view: references`. The reference renders the canonical conjunctions,
